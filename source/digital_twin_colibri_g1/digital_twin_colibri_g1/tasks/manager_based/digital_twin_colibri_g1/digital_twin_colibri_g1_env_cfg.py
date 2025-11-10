@@ -3,178 +3,202 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import math
+"""
+G1 Humanoid Robot Environment for Digital Twin Colibri Project.
 
-import isaaclab.sim as sim_utils
-from isaaclab.assets import ArticulationCfg, AssetBaseCfg
-from isaaclab.envs import ManagerBasedRLEnvCfg
-from isaaclab.managers import EventTermCfg as EventTerm
-from isaaclab.managers import ObservationGroupCfg as ObsGroup
-from isaaclab.managers import ObservationTermCfg as ObsTerm
+This environment configures the Unitree G1 humanoid robot for velocity tracking
+in a custom USD environment (Colibri digital twin).
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.managers import TerminationTermCfg as DoneTerm
-from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
+# ============================================
+# Import base G1 configuration from IsaacLab
+# ============================================
+from isaaclab_tasks.manager_based.locomotion.velocity.config.g1.flat_env_cfg import (
+    G1FlatEnvCfg,
+)
+
+# Import custom MDP functions if needed
 from . import mdp
 
 ##
-# Pre-defined configs
-##
-
-from isaaclab_assets.robots.cartpole import CARTPOLE_CFG  # isort:skip
-
-
-##
-# Scene definition
+# Environment Configuration
 ##
 
 
 @configclass
-class DigitalTwinColibriG1SceneCfg(InteractiveSceneCfg):
-    """Configuration for a cart-pole scene."""
+class DigitalTwinColibriG1EnvCfg(G1FlatEnvCfg):
+    """
+    G1 humanoid robot for velocity tracking in Colibri digital twin environment.
 
-    # ground plane
-    ground = AssetBaseCfg(
-        prim_path="/World/ground",
-        spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0)),
-    )
+    This configuration inherits from the standard G1 flat terrain config
+    and customizes it for the Colibri project's specific requirements.
+    """
 
-    # robot
-    robot: ArticulationCfg = CARTPOLE_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    def __post_init__(self):
+        # Call parent initialization first to get all G1 defaults
+        super().__post_init__()
 
-    # lights
-    dome_light = AssetBaseCfg(
-        prim_path="/World/DomeLight",
-        spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
-    )
+        # ============================================
+        # TERRAIN: Replace with Custom USD Environment
+        # ============================================
 
+        # Path to custom Colibri USD environment
+        ASSETS_DIR = (
+            Path(__file__).resolve().parent.parent.parent.parent.parent.parent.parent
+            / "assets"
+        )
 
-##
-# MDP settings
-##
+        # Load custom USD environment for Colibri digital twin
+        usd_path = ASSETS_DIR / "colivriLab" / "ColibriBuilding.usd"
 
+        self.scene.terrain = TerrainImporterCfg(
+            prim_path="/World/ground",
+            terrain_type="usd",
+            usd_path=str(usd_path),
+            terrain_generator=None,
+            collision_group=-1,
+        )
 
-@configclass
-class ActionsCfg:
-    """Action specifications for the MDP."""
+        # ============================================
+        # SCENE SETTINGS: Adjust for your hardware
+        # ============================================
 
-    joint_effort = mdp.JointEffortActionCfg(asset_name="robot", joint_names=["slider_to_cart"], scale=100.0)
+        # Reduce number of parallel environments if needed
+        # G1 default is 4096, reduce if your USD is complex or GPU memory limited
+        self.scene.num_envs = 512  # Adjust based on your GPU
 
+        # Adjust environment spacing for your specific environment
+        self.scene.env_spacing = 0.2
 
-@configclass
-class ObservationsCfg:
-    """Observation specifications for the MDP."""
+        # Episode length (seconds)
+        self.episode_length_s = 20.0
 
-    @configclass
-    class PolicyCfg(ObsGroup):
-        """Observations for policy group."""
+        # ============================================
+        # ROBOT SPAWNING: Adjust height for raised floor
+        # ============================================
 
-        # observation terms (order preserved)
-        joint_pos_rel = ObsTerm(func=mdp.joint_pos_rel)
-        joint_vel_rel = ObsTerm(func=mdp.joint_vel_rel)
+        # Override spawn height to prevent robots getting stuck in raised floor
+        # Adjust the Z value based on your floor height in the USD
+        # The range (1.0, 1.0) spawns robots at exactly 1.0m above origin
+        # Increase if needed based on your floor elevation
+        self.events.reset_base.params["pose_range"]["z"] = (1.2, 1.2)
 
-        def __post_init__(self) -> None:
-            self.enable_corruption = False
-            self.concatenate_terms = True
+        # ============================================
+        # VELOCITY COMMANDS: Customize for Colibri
+        # ============================================
 
-    # observation groups
-    policy: PolicyCfg = PolicyCfg()
+        # Adjust velocity ranges based on your environment constraints
+        # Example: Slower speeds for indoor navigation
+        # self.commands.base_velocity.ranges.lin_vel_x = (0.0, 1.0)  # m/s forward
+        # self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)  # m/s lateral
+        # self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)  # rad/s rotation
 
+        # ============================================
+        # REWARDS: Add custom rewards for Colibri task
+        # ============================================
 
-@configclass
-class EventCfg:
-    """Configuration for events."""
+        # Example: You can add custom rewards here
+        # Uncomment and modify if you need task-specific rewards
 
-    # reset
-    reset_cart_position = EventTerm(
-        func=mdp.reset_joints_by_offset,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]),
-            "position_range": (-1.0, 1.0),
-            "velocity_range": (-0.5, 0.5),
-        },
-    )
+        # self.rewards.custom_colibri_reward = RewTerm(
+        #     func=mdp.custom_reward_function,  # Define in mdp/rewards.py
+        #     weight=1.0,
+        # )
 
-    reset_pole_position = EventTerm(
-        func=mdp.reset_joints_by_offset,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]),
-            "position_range": (-0.25 * math.pi, 0.25 * math.pi),
-            "velocity_range": (-0.25 * math.pi, 0.25 * math.pi),
-        },
-    )
+        # Example: Penalize undesired contacts with environment objects
+        # self.rewards.obstacle_contact_penalty = RewTerm(
+        #     func=mdp.undesired_contacts,
+        #     weight=-2.0,
+        #     params={
+        #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names="torso_link"),
+        #         "threshold": 1.0,
+        #     }
+        # )
 
+        # ============================================
+        # OBSERVATIONS: Modify if needed
+        # ============================================
 
-@configclass
-class RewardsCfg:
-    """Reward terms for the MDP."""
+        # The G1 config already includes:
+        # - base_lin_vel, base_ang_vel
+        # - projected_gravity
+        # - velocity_commands
+        # - joint_pos, joint_vel
+        # - actions
+        # - height_scan (disabled for flat terrain, but can re-enable for USD)
 
-    # (1) Constant running reward
-    alive = RewTerm(func=mdp.is_alive, weight=1.0)
-    # (2) Failure penalty
-    terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
-    # (3) Primary task: keep pole upright
-    pole_pos = RewTerm(
-        func=mdp.joint_pos_target_l2,
-        weight=-1.0,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]), "target": 0.0},
-    )
-    # (4) Shaping tasks: lower cart velocity
-    cart_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.01,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"])},
-    )
-    # (5) Shaping tasks: lower pole angular velocity
-    pole_vel = RewTerm(
-        func=mdp.joint_vel_l1,
-        weight=-0.005,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"])},
-    )
+        # Example: Re-enable height scanning if your USD has terrain variation
+        # from isaaclab.sensors import RayCasterCfg, patterns
+        # self.scene.height_scanner = RayCasterCfg(
+        #     prim_path="{ENV_REGEX_NS}/Robot/torso_link",
+        #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+        #     ray_alignment="yaw",
+        #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+        #     debug_vis=False,
+        #     mesh_prim_paths=["/World/ground"],
+        # )
 
+        # ============================================
+        # VIEWER SETTINGS: Better camera for visualization
+        # ============================================
 
-@configclass
-class TerminationsCfg:
-    """Termination terms for the MDP."""
-
-    # (1) Time out
-    time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    # (2) Cart out of bounds
-    cart_out_of_bounds = DoneTerm(
-        func=mdp.joint_pos_out_of_manual_limit,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
-    )
-
-
-##
-# Environment configuration
-##
+        # Adjust viewer camera position for better visualization
+        self.viewer.eye = (5.0, 5.0, 3.0)  # Camera position
+        self.viewer.lookat = (0.0, 0.0, 0.0)  # Camera target
 
 
 @configclass
-class DigitalTwinColibriG1EnvCfg(ManagerBasedRLEnvCfg):
-    # Scene settings
-    scene: DigitalTwinColibriG1SceneCfg = DigitalTwinColibriG1SceneCfg(num_envs=4096, env_spacing=4.0)
-    # Basic settings
-    observations: ObservationsCfg = ObservationsCfg()
-    actions: ActionsCfg = ActionsCfg()
-    events: EventCfg = EventCfg()
-    # MDP settings
-    rewards: RewardsCfg = RewardsCfg()
-    terminations: TerminationsCfg = TerminationsCfg()
+class DigitalTwinColibriG1EnvCfg_PLAY(DigitalTwinColibriG1EnvCfg):
+    """
+    Play/evaluation configuration for visualization and policy testing.
 
-    # Post initialization
-    def __post_init__(self) -> None:
-        """Post initialization."""
-        # general settings
-        self.decimation = 2
-        self.episode_length_s = 5
-        # viewer settings
-        self.viewer.eye = (8.0, 0.0, 5.0)
-        # simulation settings
-        self.sim.dt = 1 / 120
-        self.sim.render_interval = self.decimation
+    This config reduces the number of environments and disables randomization
+    for better visualization and consistent evaluation.
+    """
+
+    def __post_init__(self):
+        # Call parent initialization
+        super().__post_init__()
+
+        # ============================================
+        # SCENE: Fewer environments for visualization
+        # ============================================
+
+        self.scene.num_envs = 10  # Small number for visualization
+        self.scene.env_spacing = 5
+
+        # Longer episodes for evaluation/demo
+        self.episode_length_s = 30.0
+
+        # ============================================
+        # DISABLE RANDOMIZATION for consistent eval
+        # ============================================
+
+        # Disable observation noise
+        self.observations.policy.enable_corruption = False
+
+        # Remove external disturbances
+        if hasattr(self.events, "base_external_force_torque"):
+            self.events.base_external_force_torque = None
+        if hasattr(self.events, "push_robot"):
+            self.events.push_robot = None
+
+        # ============================================
+        # OPTIONAL: Fixed velocity commands for demo
+        # ============================================
+
+        # Uncomment to set fixed velocity commands during play
+        # self.commands.base_velocity.ranges.lin_vel_x = (1.0, 1.0)  # 1 m/s forward
+        # self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)  # No lateral
+        # self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)  # No rotation

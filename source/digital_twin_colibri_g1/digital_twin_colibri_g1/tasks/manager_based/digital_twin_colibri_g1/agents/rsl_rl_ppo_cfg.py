@@ -3,36 +3,55 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+"""
+PPO training configuration for Colibri G1 Digital Twin.
+
+This configuration inherits from G1's proven PPO settings and allows
+for customization specific to the Colibri environment if needed.
+"""
+
 from isaaclab.utils import configclass
 
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+# Import G1's proven PPO configuration
+from isaaclab_tasks.manager_based.locomotion.velocity.config.g1.agents.rsl_rl_ppo_cfg import (
+    G1FlatPPORunnerCfg,
+)
 
 
 @configclass
-class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 16
-    max_iterations = 150
-    save_interval = 50
-    experiment_name = "cartpole_direct"
-    policy = RslRlPpoActorCriticCfg(
-        init_noise_std=1.0,
-        actor_obs_normalization=False,
-        critic_obs_normalization=False,
-        actor_hidden_dims=[32, 32],
-        critic_hidden_dims=[32, 32],
-        activation="elu",
-    )
-    algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef=1.0,
-        use_clipped_value_loss=True,
-        clip_param=0.2,
-        entropy_coef=0.005,
-        num_learning_epochs=5,
-        num_mini_batches=4,
-        learning_rate=1.0e-3,
-        schedule="adaptive",
-        gamma=0.99,
-        lam=0.95,
-        desired_kl=0.01,
-        max_grad_norm=1.0,
-    )
+class ColibriG1PPORunnerCfg(G1FlatPPORunnerCfg):
+    """
+    PPO runner configuration for Colibri G1 task.
+
+    Inherits from G1's flat terrain PPO config and customizes for Colibri.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # Customize experiment name
+        self.experiment_name = "colibri_g1_digital_twin"
+
+        # ============================================
+        # OPTIONAL CUSTOMIZATIONS
+        # ============================================
+
+        # You can override any hyperparameters here if needed
+        # For example:
+
+        # Learning rate
+        # self.algorithm.learning_rate = 1e-4
+
+        # Network architecture
+        # self.policy.actor_hidden_dims = [512, 256, 128]
+        # self.policy.critic_hidden_dims = [512, 256, 128]
+
+        # Training iterations
+        # self.max_iterations = 2000
+
+        # Save interval
+        # self.save_interval = 100
+
+
+# For backward compatibility, you can keep the original name
+PPORunnerCfg = ColibriG1PPORunnerCfg
