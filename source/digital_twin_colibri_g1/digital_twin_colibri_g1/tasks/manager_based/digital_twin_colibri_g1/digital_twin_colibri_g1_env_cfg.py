@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.terrains import TerrainImporterCfg
@@ -105,26 +106,48 @@ class DigitalTwinColibriG1EnvCfg(G1FlatEnvCfg):
         # self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)  # rad/s rotation
 
         # ============================================
+        # GOAL POSITION: Add goal tracking for navigation
+        # ============================================
+
+        # Add goal position command (runs alongside velocity commands)
+        # Goals are sampled 3-6m from robot (far enough that falling won't reach goal)
+        # Resample every 10-15s
+        self.commands.goal_position = mdp.SimpleGoalCommandCfg(
+            asset_name="robot",
+            resampling_time_range=(10.0, 15.0),
+            debug_vis=True,  # Enable visualization of goal markers
+            ranges=mdp.SimpleGoalCommandCfg.Ranges(
+                goal_distance=(3.0, 6.0),  # 3-6 meters from robot (prevents lucky falls)
+            ),
+        )
+
+        # ============================================
+        # OBSERVATIONS: Add goal position to observation space
+        # ============================================
+
+        # Add goal position (2D: x, y in base frame) to policy observations
+        self.observations.policy.goal_position = ObsTerm(
+            func=mdp.generated_commands,
+            params={"command_name": "goal_position"},
+        )
+
+        # ============================================
         # REWARDS: Add custom rewards for Colibri task
         # ============================================
 
-        # Example: You can add custom rewards here
-        # Uncomment and modify if you need task-specific rewards
-
-        # self.rewards.custom_colibri_reward = RewTerm(
-        #     func=mdp.custom_reward_function,  # Define in mdp/rewards.py
-        #     weight=1.0,
-        # )
-
-        # Example: Penalize undesired contacts with environment objects
-        # self.rewards.obstacle_contact_penalty = RewTerm(
-        #     func=mdp.undesired_contacts,
-        #     weight=-2.0,
-        #     params={
-        #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names="torso_link"),
-        #         "threshold": 1.0,
-        #     }
-        # )
+        # Add small bonus reward for approaching goal
+        # This uses conservative parameters to not overpower velocity tracking:
+        # - std=5.0: Gentle gradient across 1-4m goal distance range
+        # - weight=0.05: Provides 2-4x velocity tracking magnitude (~0.02-0.04 vs ~0.01)
+        # - Result: Gentle bias toward goals without breaking locomotion learning
+        self.rewards.goal_tracking = RewTerm(
+            func=mdp.goal_distance_exp,
+            weight=0.05,
+            params={
+                "command_name": "goal_position",
+                "std": 5.0,
+            },
+        )
 
         # ============================================
         # OBSERVATIONS: Modify if needed

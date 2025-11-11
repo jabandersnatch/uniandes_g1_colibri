@@ -14,4 +14,6 @@ custom reward/observation/action functions specific to the Colibri task.
 from isaaclab.envs.mdp import *  # noqa: F401, F403
 
 # Import custom MDP functions for Colibri task
+from .commands import *  # noqa: F401, F403
+from .commands_cfg import *  # noqa: F401, F403
 from .rewards import *  # noqa: F401, F403
