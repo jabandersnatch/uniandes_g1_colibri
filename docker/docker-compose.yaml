@@ -1,13 +1,16 @@
 # Docker Compose configuration for Colibri G1 Digital Twin with ROS2
 # Phase 6: Sim2Sim ROS2 Integration
 #
+# Based on Isaac Sim 5.1.0 + Isaac Lab 2.2+ + ROS2 Humble
+#
 # Usage:
 #   docker-compose -f docker/docker-compose.yaml build
 #   docker-compose -f docker/docker-compose.yaml up isaac_sim_ros2
 #
-# Or use the helper script:
+# Or use the helper script (recommended):
 #   ./docker/launch.sh build
 #   ./docker/launch.sh sim2sim
+#   ./docker/launch.sh rviz
 
 version: '3.8'
 
@@ -34,8 +37,14 @@ services:
       - ROS_DOMAIN_ID=0
       - ROS_LOCALHOST_ONLY=0
 
-      # Isaac Sim settings
+      # Isaac Sim and Isaac Lab settings
       - ISAAC_SIM_PATH=/isaac-sim
+      - ISAACLAB_PATH=/workspace/IsaacLab
+      - ACCEPT_EULA=Y
+      - PRIVACY_CONSENT=Y
+
+      # ROS2 middleware
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
     # Volume mounts
     volumes:
@@ -98,6 +107,13 @@ services:
 #   logs_volume:
 #   outputs_volume:
 
-# TODO Phase 6.1: Test Docker Compose configuration
-# TODO Phase 6.2: Add health checks
-# TODO Phase 6.3: Optimize volume mounts for development workflow
+# Notes:
+#   - network_mode: host is required for ROS2 DDS discovery
+#   - shm_size: 8gb is needed for large ROS2 messages (images, point clouds)
+#   - Volume mounts preserve logs and outputs between container restarts
+#   - Assets and configs are mounted read-only for safety
+#
+# Troubleshooting:
+#   - X11 permission denied: Run `xhost +local:docker` on host
+#   - GPU not detected: Ensure nvidia-container-toolkit is installed
+#   - ROS2 topics not visible: Check ROS_DOMAIN_ID matches between containers
