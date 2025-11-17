@@ -1,0 +1,72 @@
+# ROS2 Sim2Sim Configuration for Colibri G1 Digital Twin
+# Phase 6: Sim2Sim ROS2 Integration
+
+# Simulation Settings
+num_envs: 1                    # Single robot for sim2sim (required)
+freq: 50                       # Control frequency in Hz
+episode_length_s: null         # Infinite (continuous operation)
+
+# Scene Settings
+scene:
+  env_spacing: 0.0             # No spacing needed (single robot)
+  camera_follow: true          # Camera tracks robot in GUI
+
+# ROS2 Settings
+ros2:
+  namespace: "colibri_g1"                        # Topic namespace
+  publish_tf: true                               # Enable TF broadcasting
+  publish_clock: true                            # Publish simulation time
+  publish_rate: 50                               # Hz (for odometry, joint states)
+  goal_marker_rate: 1                            # Hz (for goal visualization)
+  enable_cmd_vel_override: false                 # Allow external velocity commands
+
+# Policy Settings
+policy:
+  # Path to trained checkpoint (update with your checkpoint path)
+  # Example: logs/rsl_rl/isaac-colibri-g1-v0/2025-01-15_10-30-00/model_10000.pt
+  checkpoint: "logs/rsl_rl/isaac-colibri-g1-v0/LATEST/model_10000.pt"
+  device: "cuda"                                 # "cuda" or "cpu"
+  deterministic: true                            # No exploration noise during deployment
+
+# Sensor Settings (Phase 6.4+ - Optional)
+sensor:
+  enable_camera: false         # RGB/depth camera
+  enable_lidar: false          # 2D/3D LiDAR
+
+  # Camera configuration (if enabled)
+  camera:
+    width: 640
+    height: 480
+    fov: 90                    # Field of view in degrees
+    frame_id: "front_camera_link"
+
+  # LiDAR configuration (if enabled)
+  lidar:
+    type: "2d"                 # "2d" or "3d"
+    range: 10.0                # Maximum range in meters
+    resolution: 0.01           # Angular resolution in meters
+    frame_id: "lidar_link"
+
+# Environment Settings
+environment:
+  use_custom_usd: true
+  usd_path: "assets/colivriLab/ColibriBuilding.usd"  # Path to Colibri Lab scene
+
+# Debug Settings
+debug:
+  visualize_goals: true        # Show goal markers in Isaac Sim
+  print_diagnostics: false     # Print ROS2 publish rates and diagnostics
+  record_video: false          # Record simulation video
+  video_interval: 1000         # Record every N steps
+
+# Performance Settings
+performance:
+  render_interval: 4           # Render every N simulation steps (decimation)
+  headless: false              # Run without GUI (set to true for better performance)
+
+# Note: This configuration extends DigitalTwinColibriG1EnvCfg_PLAY
+# The following settings are inherited and do NOT need to be specified here:
+#   - Observations (includes goal position in base frame)
+#   - Actions (29 DOF joint position targets)
+#   - Rewards (goal distance, heading alignment, locomotion quality)
+#   - Commands (SimpleGoalCommand for autonomous goals, GoalDirectedVelocityCommand)

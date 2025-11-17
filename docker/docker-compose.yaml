@@ -1,0 +1,103 @@
+# Docker Compose configuration for Colibri G1 Digital Twin with ROS2
+# Phase 6: Sim2Sim ROS2 Integration
+#
+# Usage:
+#   docker-compose -f docker/docker-compose.yaml build
+#   docker-compose -f docker/docker-compose.yaml up isaac_sim_ros2
+#
+# Or use the helper script:
+#   ./docker/launch.sh build
+#   ./docker/launch.sh sim2sim
+
+version: '3.8'
+
+services:
+  # Main service: Isaac Sim with ROS2 bridge
+  isaac_sim_ros2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: colibri_g1_ros2:latest
+    container_name: colibri_g1_sim2sim
+
+    # NVIDIA GPU support
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+
+      # X11 forwarding for GUI
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+
+      # ROS2 settings
+      - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=0
+
+      # Isaac Sim settings
+      - ISAAC_SIM_PATH=/isaac-sim
+
+    # Volume mounts
+    volumes:
+      # X11 socket for GUI
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+
+      # Logs (persistent, read-write)
+      - ../logs:/workspace/uniandes_g1_colibri/digital_twin_colibri_g1/logs:rw
+
+      # Outputs (persistent, read-write)
+      - ../outputs:/workspace/uniandes_g1_colibri/digital_twin_colibri_g1/outputs:rw
+
+      # Assets (read-only, for USD scenes)
+      - ../assets:/workspace/uniandes_g1_colibri/digital_twin_colibri_g1/assets:ro
+
+      # Configuration (read-only)
+      - ../cfg:/workspace/uniandes_g1_colibri/digital_twin_colibri_g1/cfg:ro
+
+      # RViz config (read-only)
+      - ../rviz:/workspace/uniandes_g1_colibri/digital_twin_colibri_g1/rviz:ro
+
+    # Network configuration
+    # Use 'host' network mode for ROS2 DDS multicast discovery
+    network_mode: host
+
+    # Shared memory size (important for large ROS2 messages like images)
+    shm_size: '8gb'
+
+    # Optional: Privileged mode (alternative to runtime: nvidia)
+    # privileged: true
+
+    # Optional: Limit resources
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Command (can be overridden)
+    # Default: sim2sim
+    # Override: docker-compose run --rm isaac_sim_ros2 rviz
+    command: ["sim2sim"]
+
+  # Optional: Standalone RViz2 service (for visualization on host)
+  rviz2:
+    extends: isaac_sim_ros2
+    container_name: colibri_g1_rviz2
+    command: ["rviz"]
+    depends_on:
+      - isaac_sim_ros2
+    restart: "no"
+
+# Optional: Named volumes (for easier management)
+# volumes:
+#   logs_volume:
+#   outputs_volume:
+
+# TODO Phase 6.1: Test Docker Compose configuration
+# TODO Phase 6.2: Add health checks
+# TODO Phase 6.3: Optimize volume mounts for development workflow

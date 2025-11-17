@@ -1,0 +1,92 @@
+# RViz2 Configuration for Colibri G1 Digital Twin
+# Phase 6: Sim2Sim ROS2 Integration
+#
+# This is a basic RViz2 configuration for visualizing the Colibri G1 robot.
+# It will be enhanced in Phase 6.3 with additional displays.
+#
+# Usage:
+#   rviz2 -d rviz/colibri_g1.rviz
+#
+# TODO Phase 6.3: Add robot model, TF tree, goal markers, odometry trail
+
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Views
+    Name: Views
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Plane: XY
+      Reference Frame: map
+
+    # TF Display (shows coordinate frames)
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Marker Scale: 0.5
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+
+    # Odometry Display (robot path trail)
+    - Class: rviz_default_plugins/Odometry
+      Enabled: true
+      Topic: /colibri_g1/odom
+      Name: Odometry
+      Keep: 100
+      Length: 0.1
+      Shaft Diameter: 0.02
+      Head Diameter: 0.05
+
+    # Goal Marker Display
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Topic: /colibri_g1/goal_marker
+      Name: Goal Marker
+
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+    - Class: rviz_default_plugins/SetInitialPose
+    - Class: rviz_default_plugins/SetGoal
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 10.0
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1.0
+        Value: false
+      Focal Point:
+        X: 0.0
+        Y: 0.0
+        Z: 0.0
+      Pitch: 0.785
+      Target Frame: map
+      Yaw: 0.785
+
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 1016
+  Width: 1920
