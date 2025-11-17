@@ -26,10 +26,26 @@ keywords = ["extension", "template", "isaaclab"]
 name = "digital_twin_colibri_g1"
 
 [isaaclab_settings]
-# TODO: Uncomment and list any apt dependencies here.
-#       If none, leave it commented out.
-# apt_deps = ["example_package"]
-# TODO: Uncomment and provide path to a ros_ws
-#       with rosdeps to be installed. If none,
-#       leave it commented out.
-# ros_ws = "path/from/extension_root/to/ros_ws"
+# APT dependencies for ROS2 integration (Phase 6: Sim2Sim)
+# These are installed automatically by Isaac Lab's install_deps.py script
+apt_deps = [
+    # ROS2 Humble packages (will be installed via apt if available)
+    # Note: In Docker, these are already installed in Stage 2
+    # For native installation, ensure ROS2 Humble is installed first
+]
+
+# Python package dependencies via pipapi
+# Note: rclpy is in setup.py INSTALL_REQUIRES
+# ROS2 message packages (geometry_msgs, nav_msgs, etc.) are installed via apt, not pip
+# They use the system ROS2 installation
+
+[python.pipapi]
+requirements = [
+    "hydra-core",  # For configuration management in sim2sim
+]
+
+modules = [
+    "hydra",
+]
+
+use_online_index = true

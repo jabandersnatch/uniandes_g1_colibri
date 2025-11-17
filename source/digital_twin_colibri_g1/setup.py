@@ -17,8 +17,12 @@ EXTENSION_TOML_DATA = toml.load(os.path.join(EXTENSION_PATH, "config", "extensio
 
 # Minimum dependencies required prior to installation
 INSTALL_REQUIRES = [
-    # NOTE: Add dependencies
+    # System utilities
     "psutil",
+    # ROS2 Python packages (Phase 6: Sim2Sim ROS2 Integration)
+    "rclpy",              # ROS2 Python client library
+    # Note: ROS2 message packages are typically installed via apt in Docker
+    # For native installation, install ros-humble-geometry-msgs, etc. via apt
 ]
 
 # Installation operation

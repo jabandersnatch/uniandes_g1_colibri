@@ -178,17 +178,12 @@ COPY . /workspace/uniandes_g1_colibri/digital_twin_colibri_g1
 WORKDIR /workspace/uniandes_g1_colibri/digital_twin_colibri_g1
 
 # Install Colibri G1 extension in editable mode
+# This will install dependencies from setup.py: psutil, rclpy
 RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install -e source/digital_twin_colibri_g1
 
-# Install ROS2 Python packages (using Isaac Sim's Python)
-RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install --no-cache-dir \
-    rclpy \
-    geometry-msgs \
-    nav-msgs \
-    sensor-msgs \
-    visualization-msgs \
-    std-msgs \
-    rosgraph-msgs
+# Note: ROS2 message packages (geometry_msgs, nav_msgs, etc.) are already installed
+# via APT in Stage 2 (ros-humble-desktop includes all standard message packages)
+# They should NOT be installed via pip as they are C++ libraries with Python bindings
 
 ######################################################################
 # Stage 5: Final Configuration
