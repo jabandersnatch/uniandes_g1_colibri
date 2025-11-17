@@ -96,28 +96,40 @@ class DigitalTwinColibriG1EnvCfg(G1FlatEnvCfg):
         self.events.reset_base.params["pose_range"]["z"] = (1.2, 1.2)
 
         # ============================================
-        # VELOCITY COMMANDS: Customize for Colibri
-        # ============================================
-
-        # Adjust velocity ranges based on your environment constraints
-        # Example: Slower speeds for indoor navigation
-        # self.commands.base_velocity.ranges.lin_vel_x = (0.0, 1.0)  # m/s forward
-        # self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)  # m/s lateral
-        # self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)  # rad/s rotation
-
-        # ============================================
         # GOAL POSITION: Add goal tracking for navigation
         # ============================================
 
         # Add goal position command (runs alongside velocity commands)
-        # Goals are sampled 3-6m from robot (far enough that falling won't reach goal)
-        # Resample every 10-15s
+        # Goals are sampled 2-4m from robot (closer for easier reaching)
+        # Resample every 20-30s (longer time to allow robot to reach goal)
         self.commands.goal_position = mdp.SimpleGoalCommandCfg(
             asset_name="robot",
-            resampling_time_range=(10.0, 15.0),
-            debug_vis=True,  # Enable visualization of goal markers
+            resampling_time_range=(20.0, 30.0),  # Increased: Give more time to reach goal
+            debug_vis=True,  # Enable visualization with color change when reached
             ranges=mdp.SimpleGoalCommandCfg.Ranges(
-                goal_distance=(3.0, 6.0),  # 3-6 meters from robot (prevents lucky falls)
+                goal_distance=(2.0, 4.0),  # Reduced: Closer goals (2-4m instead of 3-6m)
+            ),
+        )
+
+        # ============================================
+        # VELOCITY COMMANDS: Replace with goal-directed velocity
+        # ============================================
+
+        # Replace random velocity commands with goal-directed commands
+        # Robot will ALWAYS move toward the goal with smooth speed adjustments
+        self.commands.base_velocity = mdp.GoalDirectedVelocityCommandCfg(
+            asset_name="robot",
+            goal_command_name="goal_position",  # Track the goal position command
+            resampling_time_range=(100.0, 100.0),  # Not used (updates every step)
+            min_velocity_ratio=0.2,  # Maintain at least 20% speed when close
+            distance_scaling_factor=3.0,  # Start reducing speed within 3m
+            debug_vis=True,  # Show velocity arrow
+            ranges=mdp.GoalDirectedVelocityCommandCfg.Ranges(
+                # Original G1 velocity ranges (reduced from 1.5 back to 1.0)
+                lin_vel_x=(0.0, 1.0),  # Forward: 0-1.0 m/s (original G1 range)
+                lin_vel_y=(-0.5, 0.5),  # Lateral: ±0.5 m/s (original G1 range)
+                ang_vel_z=(-1.0, 1.0),  # Rotation: ±1.0 rad/s (original G1 range)
+                heading=(-3.14, 3.14),  # Full rotation range
             ),
         )
 
@@ -132,20 +144,63 @@ class DigitalTwinColibriG1EnvCfg(G1FlatEnvCfg):
         )
 
         # ============================================
-        # REWARDS: Add custom rewards for Colibri task
+        # REWARDS: Add custom rewards for Colibri task (GOAL-DIRECTED)
         # ============================================
 
-        # Add small bonus reward for approaching goal
-        # This uses conservative parameters to not overpower velocity tracking:
-        # - std=5.0: Gentle gradient across 1-4m goal distance range
-        # - weight=0.05: Provides 2-4x velocity tracking magnitude (~0.02-0.04 vs ~0.01)
-        # - Result: Gentle bias toward goals without breaking locomotion learning
+        # GOAL-DIRECTED APPROACH: Direct navigation with smooth movement
+        # Velocity commands ALWAYS point toward goal (no randomness)
+        # Velocity magnitude smoothly adjusts based on distance
+        #
+        # Philosophy: Teach the policy to track goal-directed velocities!
+        # - Velocity commands always point toward goal (direct navigation)
+        # - Speed adjusts smoothly: fast when far, slow when close
+        # - Policy learns to execute these goal-directed velocities
+        # - Reward for both tracking velocity AND approaching goal
+        #
+        # Reward Balancing:
+        #   Velocity tracking: weight 1.0 + 2.0 = 3.0 (learn to follow commands)
+        #   Goal tracking:     weight 0.3 + 0.2 = 0.5 (bonus for proximity)
+        #   Ratio:             6:1 (velocity tracking dominant)
+        # Since commands point toward goal, tracking them achieves navigation!
+
+        # Coarse goal tracking (wide gradient for exploration)
         self.rewards.goal_tracking = RewTerm(
             func=mdp.goal_distance_exp,
-            weight=0.05,
+            weight=0.3,  # Was 0.05 - now 6x stronger!
             params={
                 "command_name": "goal_position",
-                "std": 5.0,
+                "std": 5.0,  # Gentle gradient across 3-6m range
+            },
+        )
+
+        # Fine goal tracking (tight gradient for precision near goal)
+        self.rewards.goal_tracking_fine = RewTerm(
+            func=mdp.goal_distance_exp,
+            weight=0.2,  # Additional precision reward
+            params={
+                "command_name": "goal_position",
+                "std": 3.0,  # Tighter gradient for final approach
+            },
+        )
+
+        # Backwards velocity penalty (discourage backwards shuffling, but not too harsh)
+        # Reduced to allow natural turning movements that may involve small backwards steps
+        self.rewards.backwards_penalty = RewTerm(
+            func=mdp.backwards_velocity_penalty,
+            weight=-0.5,  # Moderate penalty (was -2.0, too harsh)
+            params={
+                "threshold": -0.05,  # Small threshold to allow balance adjustments
+            },
+        )
+
+        # Heading alignment reward (encourage facing toward goal)
+        # Rewards robot for turning to face the goal direction
+        self.rewards.heading_alignment = RewTerm(
+            func=mdp.heading_alignment_reward,
+            weight=0.3,  # Significant reward for good alignment
+            params={
+                "command_name": "goal_position",
+                "std": 0.5,  # Exponential kernel (tight alignment preferred)
             },
         )
 
@@ -216,6 +271,17 @@ class DigitalTwinColibriG1EnvCfg_PLAY(DigitalTwinColibriG1EnvCfg):
             self.events.base_external_force_torque = None
         if hasattr(self.events, "push_robot"):
             self.events.push_robot = None
+
+        # ============================================
+        # DISABLE STANDING for clearer visualization
+        # ============================================
+
+        # In PLAY mode, disable "standing" environments (where robot stands still)
+        # This prevents confusing behavior where:
+        # - Green velocity arrow disappears
+        # - Robot appears "frozen"
+        # Training keeps standing enabled for diversity (2%)
+        self.commands.base_velocity.rel_standing_envs = 0.0
 
         # ============================================
         # OPTIONAL: Fixed velocity commands for demo
