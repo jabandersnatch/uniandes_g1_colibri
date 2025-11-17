@@ -153,32 +153,35 @@ def load_trained_policy(checkpoint_path: str, env, device: str = "cuda"):
         device: Device for inference (cuda or cpu)
 
     Returns:
-        ActorCritic: Loaded policy network
+        Callable: Trained policy for inference
     """
-    # TODO Phase 6.2: Implement policy loading
-    # Reference: isaac-go2-ros2/go2/go2_ctrl.py
-    #
-    # Steps:
-    # 1. Get observation and action dimensions from env
-    # 2. Create ActorCritic network with same architecture as training
-    # 3. Load checkpoint weights
-    # 4. Set to evaluation mode
+    from rsl_rl.runners import OnPolicyRunner
+    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
-    print("[WARNING] Policy loading not yet implemented")
-    print("[WARNING] Using dummy policy (zero actions)")
+    # Import agent configuration
+    from digital_twin_colibri_g1.tasks.manager_based.digital_twin_colibri_g1.agents import (
+        ColibriG1PPORunnerCfg,
+    )
 
-    # Dummy policy for Phase 6.1
-    class DummyPolicy:
-        def __init__(self, env):
-            self.env = env
+    # Create agent configuration
+    agent_cfg = ColibriG1PPORunnerCfg()
+    agent_cfg.device = device
 
-        def act_inference(self, obs):
-            # Return zero actions (robot will use default pose)
-            num_envs = obs.shape[0]
-            num_actions = self.env.num_actions
-            return torch.zeros((num_envs, num_actions), device=obs.device)
+    # Wrap environment for RSL-RL
+    wrapped_env = RslRlVecEnvWrapper(env)
 
-    return DummyPolicy(env)
+    # Create runner (used for loading)
+    runner = OnPolicyRunner(wrapped_env, agent_cfg.to_dict(), log_dir=None, device=device)
+
+    # Load checkpoint
+    print(f"[INFO] Loading checkpoint: {checkpoint_path}")
+    runner.load(checkpoint_path)
+
+    # Get inference policy
+    policy = runner.get_inference_policy(device=device)
+
+    print("[INFO] Policy loaded and ready for inference")
+    return policy
 
 
 def policy_inference(policy, obs, deterministic=True):
@@ -192,10 +195,14 @@ def policy_inference(policy, obs, deterministic=True):
     Returns:
         torch.Tensor: Actions
     """
-    # TODO Phase 6.2: Implement proper policy inference
-    # For now, use dummy policy
-    obs_tensor = obs["policy"]  # Get policy observations
-    return policy.act_inference(obs_tensor)
+    # Get policy observations from dictionary
+    obs_tensor = obs["policy"]
+
+    # Call policy directly (returns actions)
+    # RSL-RL's get_inference_policy() returns a callable that processes observations
+    actions = policy(obs_tensor)
+
+    return actions
 
 
 if __name__ == "__main__":

@@ -291,3 +291,43 @@ class DigitalTwinColibriG1EnvCfg_PLAY(DigitalTwinColibriG1EnvCfg):
         # self.commands.base_velocity.ranges.lin_vel_x = (1.0, 1.0)  # 1 m/s forward
         # self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)  # No lateral
         # self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)  # No rotation
+
+
+##
+# ROS2 Sim2Sim Configuration (Phase 6)
+##
+
+
+@configclass
+class DigitalTwinColibriG1EnvCfg_ROS2(DigitalTwinColibriG1EnvCfg_PLAY):
+    """
+    G1 environment configuration for ROS2 sim2sim deployment.
+
+    Extends the PLAY configuration with:
+    - Single robot (num_envs = 1) for realistic deployment
+    - Infinite episode length (continuous operation)
+    - All other PLAY settings preserved (no randomization, clean visualization)
+
+    Used by: sim2sim/isaac_colibri_g1_ros2.py
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        # ============================================
+        # SIM2SIM MODIFICATIONS
+        # ============================================
+
+        # Single robot for realistic deployment
+        self.scene.num_envs = 1
+
+        # Continuous operation (no auto-reset)
+        # Set to infinity to prevent episode termination
+        self.episode_length_s = float("inf")
+
+        # All other settings inherited from PLAY mode:
+        # - No observation noise
+        # - No external disturbances
+        # - No standing environments
+        # - Longer episodes (30s from PLAY, but overridden to inf here)
+        # - Custom Colibri environment loaded

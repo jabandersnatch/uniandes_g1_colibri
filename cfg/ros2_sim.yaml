@@ -22,9 +22,9 @@ ros2:
 
 # Policy Settings
 policy:
-  # Path to trained checkpoint (update with your checkpoint path)
-  # Example: logs/rsl_rl/isaac-colibri-g1-v0/2025-01-15_10-30-00/model_10000.pt
-  checkpoint: "logs/rsl_rl/isaac-colibri-g1-v0/LATEST/model_10000.pt"
+  # Path to trained checkpoint (relative to project root)
+  # Latest checkpoint: 550 iterations from 2025-11-09 training run
+  checkpoint: "logs/rsl_rl/g1_flat/2025-11-09_16-20-14/model_550.pt"
   device: "cuda"                                 # "cuda" or "cpu"
   deterministic: true                            # No exploration noise during deployment
 
