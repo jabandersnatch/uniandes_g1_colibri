@@ -64,7 +64,7 @@ class RobotDataManager(Node):
 
         # State tracking
         self.last_goal_pos = None
-        self.last_goal_marker_time = 0
+        self.last_goal_marker_time = self.get_clock().now()  # Initialize with ROS Time
 
         self.get_logger().info(f"ROS2 bridge initialized for {self.namespace}")
 
@@ -118,14 +118,21 @@ class RobotDataManager(Node):
 
     def publish_data(self):
         """Publish all robot data (called every simulation step)."""
-        current_time = self.env.sim_time
+        # Compute simulation time for /clock topic
+        # env.common_step_counter tracks total simulation steps
+        # env.step_dt is the physics timestep * decimation
+        sim_time_seconds = float(self.env.unwrapped.common_step_counter * self.env.unwrapped.step_dt)
+
+        # Get current ROS2 time (for message headers)
+        current_time = self.get_clock().now()
 
         # Publish high-frequency topics (50 Hz)
+        # Pass current_time as ROS Time object, not float
         self._publish_odometry(current_time)
         self._publish_joint_states(current_time)
         self._publish_pose(current_time)
         self._publish_transforms(current_time)
-        self._publish_clock(current_time)
+        self._publish_clock(sim_time_seconds)
 
         # Publish low-frequency topics (conditionally)
         if self._should_publish_goal_marker(current_time):
@@ -136,13 +143,13 @@ class RobotDataManager(Node):
         """Publish /colibri_g1/odom.
 
         Args:
-            current_time: Simulation time (seconds)
+            current_time: ROS2 Time object
         """
         from .colibri_g1_ros2_utils import torch_to_ros_point, torch_to_ros_quaternion, torch_to_ros_vector3
 
         # Create odometry message
         msg = Odometry()
-        msg.header.stamp = self._to_ros_time(current_time)
+        msg.header.stamp = current_time.to_msg()  # Convert ROS Time to message
         msg.header.frame_id = "map"
         msg.child_frame_id = "base_link"
 
@@ -172,7 +179,7 @@ class RobotDataManager(Node):
         """
         # Create joint state message
         msg = JointState()
-        msg.header.stamp = self._to_ros_time(current_time)
+        msg.header.stamp = current_time.to_msg()
 
         # Get joint names from robot configuration (29 DOF for G1)
         joint_names = self.robot.data.joint_names
@@ -202,7 +209,7 @@ class RobotDataManager(Node):
 
         # Create pose message
         msg = PoseStamped()
-        msg.header.stamp = self._to_ros_time(current_time)
+        msg.header.stamp = current_time.to_msg()
         msg.header.frame_id = "map"
 
         # Get robot root state
@@ -225,7 +232,7 @@ class RobotDataManager(Node):
 
         # Create transform message
         transform = TransformStamped()
-        transform.header.stamp = self._to_ros_time(current_time)
+        transform.header.stamp = current_time.to_msg()
         transform.header.frame_id = "map"
         transform.child_frame_id = "base_link"
 
@@ -263,39 +270,23 @@ class RobotDataManager(Node):
         from .colibri_g1_ros2_utils import torch_to_ros_point, compute_euclidean_distance
 
         # Get goal position from command manager
-        # goal_position is 2D in base frame, but we need world frame for visualization
-        # Get the current goal from the command manager
-        goal_cmd = self.env.command_manager.get_command("goal_position")
+        # Access the SimpleGoalCommand term directly (not via get_command which returns tensor)
+        goal_cmd_term = self.env.command_manager._terms["goal_position"]
 
-        # Transform goal from base frame to world frame
-        # Get robot position and orientation
+        # Get goal position in world frame (shape: [num_envs, 3])
+        goal_pos_w = goal_cmd_term.goal_pos_w[0]  # First environment
+        goal_pos_3d = goal_pos_w  # Already 3D in world frame
+
+        # Get robot position for distance calculation
         root_state = self.robot.data.root_state_w[0]
         robot_pos = root_state[:3]  # [x, y, z]
-        robot_quat = root_state[3:7]  # [w, x, y, z]
-
-        # Goal is in base frame (2D: x, y), need to transform to world
-        # For simplicity, we'll get the goal position directly from the command manager
-        # The goal position stored internally should be in world frame
-        # Check if goal_cmd has world frame position
-        if hasattr(goal_cmd, "goal_pos_w"):
-            goal_pos_3d = torch.cat([goal_cmd.goal_pos_w[0, :2], torch.zeros(1, device=goal_cmd.goal_pos_w.device)])
-        else:
-            # Fallback: use goal position from command buffer (base frame)
-            # We need to transform it to world frame
-            # For now, add robot z-position to make it 3D
-            goal_pos_2d = goal_cmd.pos[0]  # Shape: (2,) in base frame
-            # This is a simplified transformation - goal is relative to base, at ground level
-            goal_pos_3d = torch.tensor(
-                [robot_pos[0] + goal_pos_2d[0], robot_pos[1] + goal_pos_2d[1], robot_pos[2].item() * 0.1],
-                device=robot_pos.device,
-            )
 
         # Compute distance to goal for color selection
         distance = compute_euclidean_distance(robot_pos[:2], goal_pos_3d[:2])
 
         # Create marker message
         marker = Marker()
-        marker.header.stamp = self._to_ros_time(current_time)
+        marker.header.stamp = current_time.to_msg()
         marker.header.frame_id = "map"
         marker.ns = "navigation"
         marker.id = 0
@@ -334,7 +325,7 @@ class RobotDataManager(Node):
 
         # Also publish goal pose for standard navigation interfaces
         goal_pose = PoseStamped()
-        goal_pose.header.stamp = self._to_ros_time(current_time)
+        goal_pose.header.stamp = current_time.to_msg()
         goal_pose.header.frame_id = "map"
         goal_pose.pose.position = torch_to_ros_point(goal_pos_3d)
         goal_pose.pose.orientation.w = 1.0
@@ -352,19 +343,12 @@ class RobotDataManager(Node):
         from .colibri_g1_ros2_utils import compute_euclidean_distance
 
         # Get goal position and robot position
-        goal_cmd = self.env.command_manager.get_command("goal_position")
+        # Access the SimpleGoalCommand term directly (same as in _publish_goal_marker)
+        goal_cmd_term = self.env.command_manager._terms["goal_position"]
+        goal_pos_3d = goal_cmd_term.goal_pos_w[0]  # World frame, shape: (3,)
+
         root_state = self.robot.data.root_state_w[0]
         robot_pos = root_state[:3]
-
-        # Get goal position in world frame (same logic as in _publish_goal_marker)
-        if hasattr(goal_cmd, "goal_pos_w"):
-            goal_pos_3d = torch.cat([goal_cmd.goal_pos_w[0, :2], torch.zeros(1, device=goal_cmd.goal_pos_w.device)])
-        else:
-            goal_pos_2d = goal_cmd.pos[0]
-            goal_pos_3d = torch.tensor(
-                [robot_pos[0] + goal_pos_2d[0], robot_pos[1] + goal_pos_2d[1], robot_pos[2].item() * 0.1],
-                device=robot_pos.device,
-            )
 
         # Compute distance to goal (2D distance, ignoring Z)
         distance = compute_euclidean_distance(robot_pos[:2], goal_pos_3d[:2])
@@ -389,13 +373,16 @@ class RobotDataManager(Node):
         """Check if goal marker should be published.
 
         Args:
-            current_time: Simulation time (seconds)
+            current_time: ROS2 Time object
 
         Returns:
             bool: True if goal marker should be published
         """
-        # Publish at 1 Hz or when goal changes
-        return (current_time - self.last_goal_marker_time) >= 1.0
+        # Publish at goal_marker_rate Hz (default 1 Hz)
+        # Convert to nanoseconds for comparison
+        time_diff = (current_time - self.last_goal_marker_time).nanoseconds
+        publish_interval_ns = int(1.0 / self.cfg.ros2.goal_marker_rate * 1e9)
+        return time_diff >= publish_interval_ns
 
     def _to_ros_time(self, sim_time):
         """Convert simulation time to ROS time.

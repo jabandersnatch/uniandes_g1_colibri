@@ -71,7 +71,9 @@ def run_sim2sim(cfg):
 
     # Modify for sim2sim
     env_cfg.scene.num_envs = cfg.num_envs  # Single robot
-    env_cfg.episode_length_s = float("inf")  # Continuous operation
+    # Use very large finite episode length instead of infinity (RSL-RL requires finite max_episode_length)
+    # 10000s = ~2.7 hours of continuous operation per episode
+    env_cfg.episode_length_s = 10000.0
 
     # Create environment
     from isaaclab.envs import ManagerBasedRLEnv
@@ -189,18 +191,15 @@ def policy_inference(policy, obs, deterministic=True):
 
     Args:
         policy: Trained policy network
-        obs: Observations dictionary
+        obs: Observations dictionary (full dict, policy extracts what it needs)
         deterministic: If True, use mean action (no exploration noise)
 
     Returns:
         torch.Tensor: Actions
     """
-    # Get policy observations from dictionary
-    obs_tensor = obs["policy"]
-
-    # Call policy directly (returns actions)
-    # RSL-RL's get_inference_policy() returns a callable that processes observations
-    actions = policy(obs_tensor)
+    # Pass the full observation dictionary to the policy
+    # RSL-RL's get_inference_policy() returns a callable that extracts obs["policy"] internally
+    actions = policy(obs)
 
     return actions
 

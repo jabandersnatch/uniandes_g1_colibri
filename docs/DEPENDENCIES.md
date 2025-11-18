@@ -226,7 +226,7 @@ If you want to use `uv` for local development (outside Docker), you would need t
 ## Docker Dependency Installation Flow
 
 ```
-Stage 1: Isaac Sim 5.1.0 Base
+Stage 1: Isaac Sim 4.5.0 Base (Ubuntu 22.04)
     ↓
 Stage 2: ROS2 Humble (APT)
     ├── ros-humble-desktop

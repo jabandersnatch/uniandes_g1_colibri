@@ -23,8 +23,10 @@ ros2:
 # Policy Settings
 policy:
   # Path to trained checkpoint (relative to project root)
-  # Latest checkpoint: 550 iterations from 2025-11-09 training run
-  checkpoint: "logs/rsl_rl/g1_flat/2025-11-09_16-20-14/model_550.pt"
+  # IMPORTANT: Use checkpoint trained with goal_position observation (125 obs)
+  # 2025-11-11_10-29-02 run: 125 obs (WITH goal_position) ✓
+  # 2025-11-09_16-20-14 run: 123 obs (WITHOUT goal_position) ✗
+  checkpoint: "logs/rsl_rl/g1_flat/2025-11-11_10-29-02/model_900.pt"
   device: "cuda"                                 # "cuda" or "cpu"
   deterministic: true                            # No exploration noise during deployment
 
