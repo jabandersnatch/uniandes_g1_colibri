@@ -96,9 +96,11 @@ def run_sim2sim(cfg):
     ros2_bridge = RobotDataManager(env, cfg)
     print("[INFO] ROS2 bridge initialized")
 
-    # Reset environment
-    obs, _ = env.reset()
-    print("[INFO] Environment reset complete")
+    # Get initial observations WITHOUT resetting (matches play script behavior)
+    # This uses the observation manager directly instead of calling reset()
+    # which would clear episode counters and cause goal tracking issues
+    obs = env.observation_manager.compute()
+    print("[INFO] Initial observations computed")
 
     # Simulation loop
     print(f"[INFO] Starting simulation at {cfg.freq} Hz")
@@ -113,8 +115,9 @@ def run_sim2sim(cfg):
             actions = policy_inference(policy, obs, cfg.policy.deterministic)
 
             # Step environment
-            step_result = env.step(actions)
-            obs = step_result[0]
+            # Returns: (obs_dict, rewards, dones, timeouts, extras)
+            # Environment automatically resets terminated envs, so obs is always valid
+            obs, _, _, _, _ = env.step(actions)
 
             # Publish ROS2 data
             ros2_bridge.publish_data()

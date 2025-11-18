@@ -275,9 +275,9 @@ Phase 6 adds ROS2 integration for sim-to-sim transfer, enabling the trained G1 p
 ### Docker Deployment
 
 The project includes a complete Docker setup with:
-- **Isaac Sim 5.1.0** (latest NVIDIA simulator)
+- **Isaac Sim 4.5.0** (Ubuntu 22.04 - official ROS2 Humble support)
 - **Isaac Lab 2.2+** (latest compatible version)
-- **ROS2 Humble** (LTS until 2027)
+- **ROS2 Humble** (LTS until 2027, officially supported on Ubuntu 22.04)
 - **CycloneDDS** (high-performance middleware)
 - **Trained policy integration** (RSL-RL checkpoint loading)
 

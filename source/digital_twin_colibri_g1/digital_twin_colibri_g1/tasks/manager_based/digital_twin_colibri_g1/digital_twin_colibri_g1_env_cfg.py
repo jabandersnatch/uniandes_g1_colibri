@@ -61,7 +61,7 @@ class DigitalTwinColibriG1EnvCfg(G1FlatEnvCfg):
         )
 
         # Load custom USD environment for Colibri digital twin
-        usd_path = ASSETS_DIR / "colivriLab" / "ColibriBuilding.usd"
+        usd_path = ASSETS_DIR / "ColibriLab" / "ColibriLab.usd"
 
         self.scene.terrain = TerrainImporterCfg(
             prim_path="/World/ground",

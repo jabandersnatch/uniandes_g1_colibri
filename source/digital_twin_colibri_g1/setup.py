@@ -19,10 +19,10 @@ EXTENSION_TOML_DATA = toml.load(os.path.join(EXTENSION_PATH, "config", "extensio
 INSTALL_REQUIRES = [
     # System utilities
     "psutil",
-    # ROS2 Python packages (Phase 6: Sim2Sim ROS2 Integration)
-    "rclpy",              # ROS2 Python client library
-    # Note: ROS2 message packages are typically installed via apt in Docker
-    # For native installation, install ros-humble-geometry-msgs, etc. via apt
+    # Note: ROS2 Python packages (rclpy, geometry_msgs, nav_msgs, etc.) MUST be
+    # installed via APT, NOT pip. They are C++ libraries with Python bindings.
+    # In Docker: Installed via ros-humble-desktop in Stage 2
+    # Native installation: sudo apt install ros-humble-desktop ros-humble-rmw-cyclonedds-cpp
 ]
 
 # Installation operation

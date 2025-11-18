@@ -7,7 +7,7 @@
 
 Successfully debugged and fixed the Colibri G1 sim2sim ROS2 bridge implementation. The system now runs a trained RL policy in Isaac Sim while publishing robot state via ROS2 topics for sim2sim transfer.
 
-## Issues Fixed (Total: 8)
+## Issues Fixed (Total: 9)
 
 ### Issue 1: OverflowError - Episode Length Infinity ✅
 **Error**: `OverflowError: cannot convert float infinity to integer`
@@ -119,6 +119,46 @@ goal_pos_3d = goal_cmd_term.goal_pos_w[0]
 **Fix**: Changed `restart: unless-stopped` → `restart: "no"`
 
 **File**: `docker/docker-compose.yaml:95`
+
+---
+
+### Issue 9: Goal-Reaching Behavior (Sim2Sim Only) ✅
+**Symptom**: Robot gets stuck after reaching goal, ball doesn't turn blue (only in sim2sim, NOT in play script)
+
+**Root Cause**: Initialization mismatch between sim2sim and play scripts:
+- **Play script**: Uses `env.get_observations()` from wrapper - computes observations without reset
+- **Sim2sim script**: Used `env.reset()` - resets episode counter to 0
+
+This caused inconsistent episode state tracking, affecting goal command updates.
+
+**Fix**: Changed sim2sim to match play script initialization pattern:
+```python
+# OLD (incorrect):
+obs, _ = env.reset()
+
+# NEW (correct - directly call observation manager):
+obs = env.observation_manager.compute()
+```
+
+Also fixed step unpacking (ManagerBasedRLEnv returns 5 values, not 4):
+```python
+# OLD (ValueError - too many values to unpack):
+obs, _, _, _ = env.step(actions)
+
+# NEW (correct - 5-tuple return):
+obs, _, _, _, _ = env.step(actions)  # (obs, rewards, dones, timeouts, extras)
+```
+
+**Why This Matters**:
+- `env.reset()` clears episode counters, terminations, and resets all managers
+- `observation_manager.compute()` gets current state without modifying internal counters
+- For continuous sim2sim operation, we want the environment to start naturally without forced reset
+- Automatic resets will happen when robot falls or episode timeout occurs
+- `RslRlVecEnvWrapper.get_observations()` internally calls `observation_manager.compute()`
+
+**Files**:
+- `sim2sim/isaac_colibri_g1_ros2.py:102` - Initialization
+- `sim2sim/isaac_colibri_g1_ros2.py:120` - Step unpacking
 
 ---
 
@@ -250,7 +290,7 @@ rviz2 -d rviz/colibri_g1.rviz
 ## Files Modified Summary
 
 ### Core Functionality
-- `sim2sim/isaac_colibri_g1_ros2.py` - Episode length, policy inference
+- `sim2sim/isaac_colibri_g1_ros2.py` - Episode length, policy inference, initialization (env.get_observations)
 - `ros2/colibri_g1_ros2_bridge.py` - Time handling, command access, timestamps
 - `cfg/ros2_sim.yaml` - Checkpoint path
 
@@ -261,7 +301,8 @@ rviz2 -d rviz/colibri_g1.rviz
 - `docs/CRASH_FIX_SUMMARY.md` - New
 - `docs/CHECKPOINT_COMPATIBILITY.md` - New
 - `docs/PERFORMANCE_OPTIMIZATION.md` - New
-- `docs/SIM2SIM_SUCCESS.md` - New
+- `docs/SIM2SIM_SUCCESS.md` - Updated with Issue 9
+- `docs/CODE_AUDIT_ROS2_BRIDGE.md` - New
 
 ---
 
@@ -321,19 +362,23 @@ rviz2 -d rviz/colibri_g1.rviz
 
 8. **USD Scene Size**: Large scenes (88MB+) cause 3-5 min startup delays
 
+9. **Environment Initialization**: Use `env.get_observations()` for continuous operation, NOT `env.reset()` which clears episode counters
+
 ---
 
 ## Conclusion
 
-The Colibri G1 sim2sim ROS2 bridge is now **fully operational**. All crashes have been resolved, and the system successfully:
+The Colibri G1 sim2sim ROS2 bridge is now **fully operational**. All 9 crashes and issues have been resolved, and the system successfully:
 
 - ✅ Loads trained RL policy (125-obs, goal-directed navigation)
 - ✅ Runs Isaac Sim physics simulation
 - ✅ Publishes 7 ROS2 topics at appropriate rates
 - ✅ Maintains 50 Hz control loop
-- ✅ Visualizes goals with color-coded markers
+- ✅ Visualizes goals with color-coded markers (green → blue when reached)
+- ✅ Handles goal resampling correctly
 - ✅ Computes navigation metrics (distance, status)
 - ✅ Broadcasts TF transforms (map → base_link)
+- ✅ Matches play script behavior for continuous operation
 
 **Ready for Phase 7: Sim2Real Transfer** 🚀
 

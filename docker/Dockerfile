@@ -5,23 +5,23 @@
 # Run: docker-compose up or ./docker/launch.sh sim2sim
 #
 # References:
-#   - NVIDIA Isaac Sim 5.1.0: https://catalog.ngc.nvidia.com/orgs/nvidia/containers/isaac-sim
+#   - NVIDIA Isaac Sim 4.5.0: https://catalog.ngc.nvidia.com/orgs/nvidia/containers/isaac-sim
 #   - Isaac Lab Docker Guide: https://isaac-sim.github.io/IsaacLab/main/source/deployment/docker.html
 #   - ROS2 Humble: https://docs.ros.org/en/humble/
 #   - isaac-go2-ros2 Dockerfile: Reference implementation
 
 ######################################################################
-# Stage 1: Isaac Sim 5.1.0 Base
-# - Latest Isaac Sim with multi-arch support
-# - Runs as rootless user by default
+# Stage 1: Isaac Sim 4.5.0 Base (Ubuntu 22.04)
+# - Compatible with ROS2 Humble (official support)
+# - Following isaac-go2-ros2 working configuration
 ######################################################################
 
-FROM nvcr.io/nvidia/isaac-sim:5.1.0 AS isaac_base
+FROM nvcr.io/nvidia/isaac-sim:4.5.0 AS isaac_base
 
 LABEL org.opencontainers.image.title="Colibri G1 Digital Twin ROS2"
 LABEL org.opencontainers.image.authors="Colibri G1 Team"
 LABEL org.opencontainers.image.version="0.1.0"
-LABEL org.opencontainers.image.description="Isaac Sim 5.1.0 + Isaac Lab 2.2 + ROS2 Humble + Colibri G1 Digital Twin"
+LABEL org.opencontainers.image.description="Isaac Sim 4.5.0 + Isaac Lab 2.2 + ROS2 Humble + Colibri G1 Digital Twin"
 
 # Set environment variables
 ENV LANG=C.UTF-8
@@ -58,18 +58,17 @@ RUN apt-get update && apt-get install -y \
 
 ENV LANG=en_US.UTF-8
 
-# Install ROS2 apt source (latest method)
-RUN export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F'"' '{print $4}') \
-    && curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $VERSION_CODENAME)_all.deb" \
-    && dpkg -i /tmp/ros2-apt-source.deb \
-    && rm /tmp/ros2-apt-source.deb
+# Install ROS2 GPG key and repository (stable method)
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
 
-# Resolve dependency conflicts (from isaac-go2-ros2 experience)
+# Resolve dependency conflicts and install required libraries
+# Note: Isaac Sim 4.5.0 uses Ubuntu 22.04 which has better ROS2 Humble compatibility
+# Fix libbrotli version conflict: Isaac Sim base has newer version from PPA
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --allow-downgrades \
     libbrotli1=1.0.9-2build6 \
-    && apt-mark hold libbrotli1 \
-    && apt-get install -y \
+    libbrotli-dev \
     libfreetype6-dev \
     libfontconfig1-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -122,7 +121,25 @@ ENV ISAACSIM_ROOT_PATH=/isaac-sim
 ENV ISAACLAB_PATH=/workspace/IsaacLab
 ENV DOCKER_USER_HOME=/root
 
-# Clone Isaac Lab repository (latest compatible with Isaac Sim 5.1.0)
+# Install Miniconda (following isaac-go2-ros2 pattern for conda isolation)
+RUN mkdir -p ${DOCKER_USER_HOME}/miniconda3 \
+    && wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ${DOCKER_USER_HOME}/miniconda3/miniconda.sh \
+    && bash ${DOCKER_USER_HOME}/miniconda3/miniconda.sh -b -u -p ${DOCKER_USER_HOME}/miniconda3 \
+    && rm ${DOCKER_USER_HOME}/miniconda3/miniconda.sh \
+    && bash -c "source ${DOCKER_USER_HOME}/miniconda3/bin/activate && conda init --all"
+
+# Add conda to PATH
+ENV PATH="${DOCKER_USER_HOME}/miniconda3/bin:$PATH"
+
+# Configure conda to avoid TOS issues (following isaac-go2-ros2)
+RUN ${DOCKER_USER_HOME}/miniconda3/bin/conda config --remove channels defaults && \
+    ${DOCKER_USER_HOME}/miniconda3/bin/conda config --add channels conda-forge && \
+    ${DOCKER_USER_HOME}/miniconda3/bin/conda config --set channel_priority strict && \
+    ${DOCKER_USER_HOME}/miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    ${DOCKER_USER_HOME}/miniconda3/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+# Clone Isaac Lab repository (compatible with Isaac Sim 4.5.0)
+# Using conda environment like isaac-go2-ros2 for better dependency isolation
 RUN git clone https://github.com/isaac-sim/IsaacLab.git ${ISAACLAB_PATH} && \
     cd ${ISAACLAB_PATH} && \
     chmod +x isaaclab.sh
@@ -130,13 +147,10 @@ RUN git clone https://github.com/isaac-sim/IsaacLab.git ${ISAACLAB_PATH} && \
 # Create symbolic link to Isaac Sim
 RUN ln -sf ${ISAACSIM_ROOT_PATH} ${ISAACLAB_PATH}/_isaac_sim
 
-# Install toml dependency for extension parsing
-RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install toml
-
-# Install apt dependencies for Isaac Lab extensions
-RUN ${ISAACLAB_PATH}/isaaclab.sh -p ${ISAACLAB_PATH}/tools/install_deps.py apt ${ISAACLAB_PATH}/source && \
-    apt -y autoremove && apt clean autoclean && \
-    rm -rf /var/lib/apt/lists/*
+# Create conda environment for Isaac Lab (following isaac-go2-ros2 pattern)
+# This isolates Isaac Lab dependencies from Isaac Sim's bundled packages
+RUN cd ${ISAACLAB_PATH} && \
+    ./isaaclab.sh --conda isaaclab
 
 # Create necessary cache directories (for singularity compatibility)
 RUN mkdir -p ${ISAACSIM_ROOT_PATH}/kit/cache && \
@@ -148,12 +162,28 @@ RUN mkdir -p ${ISAACSIM_ROOT_PATH}/kit/cache && \
     mkdir -p ${DOCKER_USER_HOME}/.local/share/ov/data && \
     mkdir -p ${DOCKER_USER_HOME}/Documents
 
-# Install Isaac Lab dependencies (use pip cache for efficiency)
-RUN --mount=type=cache,target=${DOCKER_USER_HOME}/.cache/pip \
-    ${ISAACLAB_PATH}/isaaclab.sh --install
+# CRITICAL: Create pip constraints file to enforce NumPy <2.0 across ALL installations
+# Isaac Sim 4.5.0's bundled scipy is compiled against NumPy 1.x
+# NumPy 2.x causes binary incompatibility errors
+# This constraints file prevents ANY package from upgrading NumPy to 2.x
+RUN echo "numpy<2.0" > /tmp/constraints.txt
+
+# Set PIP_CONSTRAINT environment variable to apply constraints to all pip operations
+ENV PIP_CONSTRAINT=/tmp/constraints.txt
+
+# CRITICAL: Pin NumPy to <2.0 BEFORE installing Isaac Lab
+# Combined with PIP_CONSTRAINT, this ensures NumPy stays at 1.x
+RUN bash -c "eval \"\$(${DOCKER_USER_HOME}/miniconda3/bin/conda shell.bash hook)\" && conda activate isaaclab && pip install 'numpy<2.0'"
+
+# Install Isaac Lab with conda environment activated (like isaac-go2-ros2)
+# This ensures dependencies are installed in the isolated conda environment
+# Must use the full conda path and activate via eval to initialize conda properly
+# NOTE: PIP_CONSTRAINT env var (set above) ensures NumPy stays <2.0 during installation
+RUN cd ${ISAACLAB_PATH} && \
+    bash -c "eval \"\$(${DOCKER_USER_HOME}/miniconda3/bin/conda shell.bash hook)\" && conda activate isaaclab && ./isaaclab.sh --install"
 
 # HACK: Remove problematic quadprog dependency (known Isaac Lab issue)
-RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip uninstall -y quadprog || true
+RUN bash -c "eval \"\$(${DOCKER_USER_HOME}/miniconda3/bin/conda shell.bash hook)\" && conda activate isaaclab && cd ${ISAACLAB_PATH} && ./isaaclab.sh -p -m pip uninstall -y quadprog" || true
 
 # Add Isaac Lab aliases to bashrc
 RUN echo "export ISAACLAB_PATH=${ISAACLAB_PATH}" >> ${HOME}/.bashrc && \
@@ -179,7 +209,12 @@ WORKDIR /workspace/uniandes_g1_colibri/digital_twin_colibri_g1
 
 # Install Colibri G1 extension in editable mode
 # This will install dependencies from setup.py: psutil, rclpy
-RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install -e source/digital_twin_colibri_g1
+# CRITICAL: Use conda environment activation to ensure proper installation
+# NOTE: PIP_CONSTRAINT env var ensures NumPy stays <2.0 during installation
+RUN bash -c "eval \"\$(${DOCKER_USER_HOME}/miniconda3/bin/conda shell.bash hook)\" && \
+    conda activate isaaclab && \
+    cd /workspace/uniandes_g1_colibri/digital_twin_colibri_g1 && \
+    pip install -e source/digital_twin_colibri_g1"
 
 # Note: ROS2 message packages (geometry_msgs, nav_msgs, etc.) are already installed
 # via APT in Stage 2 (ros-humble-desktop includes all standard message packages)
@@ -197,10 +232,18 @@ FROM colibri_extension AS final
 USER root
 
 # Install additional Python packages for visualization and utilities
-RUN ${ISAACLAB_PATH}/isaaclab.sh -p -m pip install --no-cache-dir \
-    opencv-python \
-    matplotlib \
-    hydra-core
+# Note: NumPy is already pinned to <2.0 in Stage 3 for Isaac Sim 4.5.0 compatibility
+# NOTE: PIP_CONSTRAINT env var ensures NumPy stays <2.0 during installation
+RUN bash -c "eval \"\$(${DOCKER_USER_HOME}/miniconda3/bin/conda shell.bash hook)\" && \
+    conda activate isaaclab && \
+    pip install --no-cache-dir opencv-python matplotlib hydra-core"
+
+# CRITICAL: Verify NumPy version is <2.0 (fail build if not)
+# This catches any accidental NumPy upgrades during installation
+RUN bash -c "eval \"\$(${DOCKER_USER_HOME}/miniconda3/bin/conda shell.bash hook)\" && \
+    conda activate isaaclab && \
+    python -c 'import numpy; assert numpy.__version__.startswith(\"1.\"), f\"NumPy version {numpy.__version__} is not 1.x! Build failed.\"' && \
+    echo \"✓ NumPy version verified: \$(python -c 'import numpy; print(numpy.__version__)')\" "
 
 # Copy entrypoint script
 COPY docker/entrypoint.sh /entrypoint.sh
@@ -217,6 +260,10 @@ ENV ROS_DOMAIN_ID=0
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 ENV PYTHONUNBUFFERED=1
 ENV NVIDIA_DRIVER_CAPABILITIES=all
+
+# CRITICAL: Add Isaac Lab and extension to PYTHONPATH so conda Python can find them
+# This ensures the digital_twin_colibri_g1 module is importable
+ENV PYTHONPATH="${ISAACLAB_PATH}/source/isaaclab:${ISAACLAB_PATH}/source/isaaclab_tasks:${ISAACLAB_PATH}/source/isaaclab_assets:/workspace/uniandes_g1_colibri/digital_twin_colibri_g1/source:${PYTHONPATH}"
 
 # Source ROS2 in bashrc
 RUN echo "source /opt/ros/humble/setup.bash" >> ${HOME}/.bashrc && \
@@ -236,7 +283,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 CMD ["sim2sim"]
 
 # Final labels
-LABEL org.opencontainers.image.base.name="nvcr.io/nvidia/isaac-sim:5.1.0"
+LABEL org.opencontainers.image.base.name="nvcr.io/nvidia/isaac-sim:4.5.0"
 LABEL org.opencontainers.image.source="https://github.com/uniandes/colibri_g1_digital_twin"
 LABEL org.opencontainers.image.vendor="Universidad de los Andes"
 LABEL org.opencontainers.image.licenses="BSD-3-Clause"
@@ -245,14 +292,18 @@ LABEL org.opencontainers.image.licenses="BSD-3-Clause"
 # Build Complete!
 #
 # Image includes:
-#   - Isaac Sim 5.1.0
-#   - Isaac Lab 2.2+ (latest)
-#   - ROS2 Humble Desktop + RViz2
+#   - Isaac Sim 4.5.0 (Ubuntu 22.04)
+#   - Isaac Lab 2.2+ in isolated conda environment (like isaac-go2-ros2)
+#   - ROS2 Humble Desktop + RViz2 (officially supported on Ubuntu 22.04)
 #   - CycloneDDS middleware
 #   - Colibri G1 Digital Twin extension
 #   - All dependencies for sim2sim deployment
 #
+# Key difference from previous builds:
+#   - Uses conda environment to isolate Isaac Lab from Isaac Sim's bundled packages
+#   - Prevents NumPy/SciPy version conflicts
+#
 # Total stages: 5
 # Base size: ~20-25GB (Isaac Sim base)
-# Additional: ~5-8GB (ROS2 + Isaac Lab + extensions)
+# Additional: ~5-8GB (ROS2 + Isaac Lab + Miniconda + extensions)
 ######################################################################

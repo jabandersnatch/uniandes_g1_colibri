@@ -8,22 +8,29 @@ set -e
 echo "[INFO] Sourcing ROS2 Humble..."
 source /opt/ros/humble/setup.bash
 
-# Source Isaac Lab environment (if using venv)
-if [ -f /workspace/IsaacLab/isaaclab/bin/activate ]; then
-    echo "[INFO] Sourcing Isaac Lab environment..."
-    source /workspace/IsaacLab/isaaclab/bin/activate
-fi
+# Source Conda environment (following isaac-go2-ros2 pattern)
+echo "[INFO] Activating conda environment 'isaaclab'..."
+eval "$(/root/miniconda3/bin/conda shell.bash hook)"
+conda activate isaaclab
 
 # Set environment variables
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
 export ISAAC_SIM_PATH=${ISAAC_SIM_PATH:-/isaac-sim}
+export ISAACLAB_PATH=${ISAACLAB_PATH:-/workspace/IsaacLab}
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ISAAC_SIM_PATH/exts/omni.isaac.ml_archive/pip_prebundle
 
 # Print environment info
 echo "[INFO] Environment configured:"
 echo "[INFO]   ROS_DOMAIN_ID: $ROS_DOMAIN_ID"
 echo "[INFO]   ISAAC_SIM_PATH: $ISAAC_SIM_PATH"
+echo "[INFO]   ISAACLAB_PATH: $ISAACLAB_PATH"
 echo "[INFO]   DISPLAY: $DISPLAY"
+echo ""
+
+# Verify conda environment is active
+echo "[INFO] Python location: $(which python)"
+echo "[INFO] Checking digital_twin_colibri_g1 installation..."
+python -c "import digital_twin_colibri_g1; print('[SUCCESS] Extension found at:', digital_twin_colibri_g1.__file__)" || echo "[WARNING] Extension not found in Python path"
 echo ""
 
 # Handle different run modes
@@ -31,6 +38,7 @@ case "$1" in
     sim2sim)
         echo "[INFO] Starting Sim2Sim ROS2 mode..."
         cd /workspace/uniandes_g1_colibri/digital_twin_colibri_g1
+        # Use Python directly from conda environment with Isaac Sim's library path
         exec python sim2sim/isaac_colibri_g1_ros2.py
         ;;
 
@@ -42,6 +50,7 @@ case "$1" in
     test_ros2)
         echo "[INFO] Starting ROS2 connection test..."
         cd /workspace/uniandes_g1_colibri/digital_twin_colibri_g1
+        # Use Python directly from conda environment with Isaac Sim's library path
         exec python sim2sim/test_ros2_connection.py
         ;;
 

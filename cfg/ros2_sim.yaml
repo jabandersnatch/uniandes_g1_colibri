@@ -2,23 +2,23 @@
 # Phase 6: Sim2Sim ROS2 Integration
 
 # Simulation Settings
-num_envs: 1                    # Single robot for sim2sim (required)
-freq: 50                       # Control frequency in Hz
-episode_length_s: null         # Infinite (continuous operation)
+num_envs: 1 # Single robot for sim2sim (required)
+freq: 50 # Control frequency in Hz
+episode_length_s: null # Infinite (continuous operation)
 
 # Scene Settings
 scene:
-  env_spacing: 0.0             # No spacing needed (single robot)
-  camera_follow: true          # Camera tracks robot in GUI
+  env_spacing: 0.0 # No spacing needed (single robot)
+  camera_follow: true # Camera tracks robot in GUI
 
 # ROS2 Settings
 ros2:
-  namespace: "colibri_g1"                        # Topic namespace
-  publish_tf: true                               # Enable TF broadcasting
-  publish_clock: true                            # Publish simulation time
-  publish_rate: 50                               # Hz (for odometry, joint states)
-  goal_marker_rate: 1                            # Hz (for goal visualization)
-  enable_cmd_vel_override: false                 # Allow external velocity commands
+  namespace: "colibri_g1" # Topic namespace
+  publish_tf: true # Enable TF broadcasting
+  publish_clock: true # Publish simulation time
+  publish_rate: 25 # Hz (for odometry, joint states)
+  goal_marker_rate: 1 # Hz (for goal visualization)
+  enable_cmd_vel_override: false # Allow external velocity commands
 
 # Policy Settings
 policy:
@@ -27,44 +27,44 @@ policy:
   # 2025-11-11_10-29-02 run: 125 obs (WITH goal_position) ✓
   # 2025-11-09_16-20-14 run: 123 obs (WITHOUT goal_position) ✗
   checkpoint: "logs/rsl_rl/g1_flat/2025-11-11_10-29-02/model_900.pt"
-  device: "cuda"                                 # "cuda" or "cpu"
-  deterministic: true                            # No exploration noise during deployment
+  device: "cuda" # "cuda" or "cpu"
+  deterministic: true # No exploration noise during deployment
 
 # Sensor Settings (Phase 6.4+ - Optional)
 sensor:
-  enable_camera: false         # RGB/depth camera
-  enable_lidar: false          # 2D/3D LiDAR
+  enable_camera: false # RGB/depth camera
+  enable_lidar: false # 2D/3D LiDAR
 
   # Camera configuration (if enabled)
   camera:
     width: 640
     height: 480
-    fov: 90                    # Field of view in degrees
+    fov: 90 # Field of view in degrees
     frame_id: "front_camera_link"
 
   # LiDAR configuration (if enabled)
   lidar:
-    type: "2d"                 # "2d" or "3d"
-    range: 10.0                # Maximum range in meters
-    resolution: 0.01           # Angular resolution in meters
+    type: "2d" # "2d" or "3d"
+    range: 10.0 # Maximum range in meters
+    resolution: 0.01 # Angular resolution in meters
     frame_id: "lidar_link"
 
 # Environment Settings
 environment:
   use_custom_usd: true
-  usd_path: "assets/colivriLab/ColibriBuilding.usd"  # Path to Colibri Lab scene
+  usd_path: "assets/colivriLab/ColibriBuilding.usd" # Path to Colibri Lab scene
 
 # Debug Settings
 debug:
-  visualize_goals: true        # Show goal markers in Isaac Sim
-  print_diagnostics: false     # Print ROS2 publish rates and diagnostics
-  record_video: false          # Record simulation video
-  video_interval: 1000         # Record every N steps
+  visualize_goals: true # Show goal markers in Isaac Sim
+  print_diagnostics: false # Print ROS2 publish rates and diagnostics
+  record_video: false # Record simulation video
+  video_interval: 1000 # Record every N steps
 
 # Performance Settings
 performance:
-  render_interval: 4           # Render every N simulation steps (decimation)
-  headless: false              # Run without GUI (set to true for better performance)
+  render_interval: 4 # Render every N simulation steps (decimation)
+  headless: false # Run without GUI (set to true for better performance)
 
 # Note: This configuration extends DigitalTwinColibriG1EnvCfg_PLAY
 # The following settings are inherited and do NOT need to be specified here:
