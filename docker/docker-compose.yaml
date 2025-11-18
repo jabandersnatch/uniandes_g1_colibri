@@ -20,6 +20,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      network: default  # Use default bridge network during build (not host)
     image: colibri_g1_ros2:latest
     container_name: colibri_g1_sim2sim
 
@@ -117,3 +118,4 @@ services:
 #   - X11 permission denied: Run `xhost +local:docker` on host
 #   - GPU not detected: Ensure nvidia-container-toolkit is installed
 #   - ROS2 topics not visible: Check ROS_DOMAIN_ID matches between containers
+#   - Build network error: build.network=default prevents network_mode:host from applying during build
