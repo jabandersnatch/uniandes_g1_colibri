@@ -49,8 +49,22 @@ xhost +local:docker
 cd /path/to/digital_twin_colibri_g1/
 
 # Build (takes 30-60 minutes first time)
+docker-compose -f docker/docker-compose.yaml build
+
+# Or with helper script
 ./docker/launch.sh build
 ```
+
+**⚠️ Troubleshooting**: If you encounter a Docker network bridge error ("operation not supported"), you may need to:
+1. Reboot your system (if kernel was recently updated)
+2. Load the veth kernel module: `sudo modprobe veth`
+3. See `docker/NETWORK_TROUBLESHOOTING.md` for detailed solutions
+
+**Docker Image Details**:
+- Base: Isaac Sim 5.1.0 (NVIDIA official)
+- Includes: Isaac Lab 2.2+, ROS2 Humble, CycloneDDS
+- Size: ~28-30 GB
+- Build stages: 5 (Isaac base → ROS2 → Isaac Lab → Extension → Finalize)
 
 ## Quick Start
 

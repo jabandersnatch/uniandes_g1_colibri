@@ -259,3 +259,174 @@ The environment inherits from Isaac Lab's proven G1 locomotion configuration, so
 2. Velocity command ranges appropriate for the Colibri environment
 3. Obstacle avoidance (if needed)
 4. Domain-specific observations
+
+---
+
+## Phase 6: Sim2Sim ROS2 Integration (Docker Deployment)
+
+### Overview
+
+Phase 6 adds ROS2 integration for sim-to-sim transfer, enabling the trained G1 policy to run in a containerized environment with ROS2 communication.
+
+**Status**: Implementation complete, Docker build ready after system reboot
+
+**Branch**: `feature/sim2sim-ros2`
+
+### Docker Deployment
+
+The project includes a complete Docker setup with:
+- **Isaac Sim 5.1.0** (latest NVIDIA simulator)
+- **Isaac Lab 2.2+** (latest compatible version)
+- **ROS2 Humble** (LTS until 2027)
+- **CycloneDDS** (high-performance middleware)
+- **Trained policy integration** (RSL-RL checkpoint loading)
+
+### Quick Start (Docker)
+
+```bash
+# Build Docker image (30-60 min first time)
+docker-compose -f docker/docker-compose.yaml build
+
+# Run sim2sim with ROS2 bridge
+docker-compose -f docker/docker-compose.yaml up isaac_sim_ros2
+
+# In another terminal, check ROS2 topics
+docker exec -it colibri_g1_sim2sim bash -c "source /opt/ros/humble/setup.bash && ros2 topic list"
+
+# Launch RViz2 for visualization
+docker-compose -f docker/docker-compose.yaml run --rm rviz2
+```
+
+### ROS2 Topics Published
+
+The sim2sim bridge publishes:
+
+| Topic | Type | Rate | Description |
+|-------|------|------|-------------|
+| `/colibri_g1/odom` | `nav_msgs/Odometry` | 50 Hz | Full odometry (pose + twist) |
+| `/colibri_g1/joint_states` | `sensor_msgs/JointState` | 50 Hz | 29-DOF joint positions/velocities |
+| `/colibri_g1/pose` | `geometry_msgs/PoseStamped` | 10 Hz | Simplified pose only |
+| `/tf` | `tf2_msgs/TFMessage` | 50 Hz | Transform: map → base_link |
+| `/colibri_g1/goal_marker` | `visualization_msgs/Marker` | 10 Hz | Goal visualization (color-coded) |
+| `/colibri_g1/navigation_metrics` | Custom | 10 Hz | Distance to goal, status |
+| `/clock` | `rosgraph_msgs/Clock` | Sim rate | Simulation time |
+
+### Key Files
+
+**ROS2 Bridge**:
+- `ros2/colibri_g1_ros2_bridge.py` - Main bridge (6 publishers implemented)
+- `ros2/colibri_g1_ros2_utils.py` - Conversion utilities (torch ↔ ROS2)
+
+**Sim2Sim Entry Point**:
+- `sim2sim/isaac_colibri_g1_ros2.py` - Main script with policy loading
+- `cfg/ros2_sim.yaml` - Hydra configuration
+
+**Docker**:
+- `docker/Dockerfile` - Multi-stage build (5 stages)
+- `docker/docker-compose.yaml` - Service orchestration
+- `docker/entrypoint.sh` - Container initialization
+- `docker/launch.sh` - Helper script (build, run, enter, etc.)
+
+**Documentation**:
+- `README_ROS2.md` - ROS2 integration guide
+- `docs/SIM2SIM_ROS2.md` - Architecture and design
+- `docs/DEPENDENCIES.md` - Dependency management (pip + apt)
+- `docker/NETWORK_TROUBLESHOOTING.md` - Docker networking issues
+- `NEXT_STEPS.md` - Post-implementation testing guide
+
+### Docker Troubleshooting
+
+**Common Issues**:
+
+1. **Network bridge error during build**:
+   - Cause: Kernel/module mismatch (veth module unavailable)
+   - Solution: Reboot system to load updated kernel
+   - See: `docker/NETWORK_TROUBLESHOOTING.md`
+
+2. **GPU not detected**:
+   ```bash
+   # Install nvidia-container-toolkit
+   # https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+   ```
+
+3. **X11 permission denied**:
+   ```bash
+   xhost +local:docker
+   ```
+
+4. **ROS2 topics not visible**:
+   - Check `ROS_DOMAIN_ID=0` matches between containers
+   - Verify `network_mode: host` in docker-compose.yaml
+
+### Dependency Management
+
+Isaac Lab uses its own dependency system (NOT `uv` or `requirements.txt`):
+
+**Python packages** → `source/digital_twin_colibri_g1/setup.py`:
+```python
+INSTALL_REQUIRES = [
+    "psutil",
+    "rclpy",  # ROS2 Python client
+]
+```
+
+**Extension packages** → `source/digital_twin_colibri_g1/config/extension.toml`:
+```toml
+[python.pipapi]
+requirements = ["hydra-core"]
+```
+
+**ROS2 message packages** → Installed via APT (NOT pip):
+```bash
+# In Dockerfile Stage 2
+apt-get install ros-humble-desktop  # Includes all standard messages
+```
+
+See `docs/DEPENDENCIES.md` for complete guide.
+
+### Native Installation (Alternative to Docker)
+
+If you prefer running natively without Docker:
+
+```bash
+# Prerequisites
+sudo apt install ros-humble-desktop ros-humble-rmw-cyclonedds-cpp
+
+# Install extension
+pip install -e source/digital_twin_colibri_g1
+
+# Run sim2sim
+source /opt/ros/humble/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+python sim2sim/isaac_colibri_g1_ros2.py
+```
+
+### Policy Checkpoint
+
+The sim2sim script loads a trained RSL-RL policy:
+
+**Default checkpoint**: `logs/rsl_rl/g1_flat/2025-11-09_16-20-14/model_550.pt`
+
+**To use a different checkpoint**, edit `cfg/ros2_sim.yaml`:
+```yaml
+policy:
+  checkpoint: "path/to/your/model.pt"
+  device: "cuda"
+  deterministic: true
+```
+
+### Testing Workflow
+
+1. **Build Docker image** (see `NEXT_STEPS.md`)
+2. **Start sim2sim**: `docker-compose up isaac_sim_ros2`
+3. **Verify ROS2 topics**: `ros2 topic list`
+4. **Monitor navigation**: `ros2 topic echo /colibri_g1/navigation_metrics`
+5. **Visualize in RViz2**: `docker-compose run --rm rviz2`
+
+### Next Phase: Sim2Real
+
+After validating Phase 6, the next step is deploying to the physical Colibri G1 robot:
+- Adapt ROS2 topics to real robot interfaces
+- Add sensor feedback (IMU, cameras, force-torque)
+- Implement safety constraints and emergency stop
+- Real-world domain randomization validation
