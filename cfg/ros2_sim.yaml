@@ -30,24 +30,36 @@ policy:
   device: "cuda" # "cuda" or "cpu"
   deterministic: true # No exploration noise during deployment
 
-# Sensor Settings (Phase 6.4+ - Optional)
+# Sensor Settings
 sensor:
-  enable_camera: false # RGB/depth camera
-  enable_lidar: false # 2D/3D LiDAR
+  enable_camera: true # RGB/depth camera for visualization
+  enable_lidar: true # RTX LiDAR for social navigation
 
-  # Camera configuration (if enabled)
+  # Camera configuration
+  # Mounted on torso for forward-facing view (similar to Go2 setup)
   camera:
     width: 640
     height: 480
     fov: 90 # Field of view in degrees
-    frame_id: "front_camera_link"
+    frame_id: "front_cam"
+    parent_link: "torso_link" # Mount on torso (stable, forward-facing)
+    translation: [0.3, 0.0, 0.3] # Forward and up from torso
+    frequency: 50 # Camera capture frequency (Hz) - matches simulation frequency
+    color_image: true # Publish RGB image
+    depth_image: true # Publish depth image
 
-  # LiDAR configuration (if enabled)
+  # RTX LiDAR configuration
+  # Uses Hesai XT32 (32-channel) for 360-degree environmental scanning
+  # Mounted on torso_link (like Go2's base) for consistent frame
   lidar:
-    type: "2d" # "2d" or "3d"
-    range: 10.0 # Maximum range in meters
-    resolution: 0.01 # Angular resolution in meters
-    frame_id: "lidar_link"
+    config: "Hesai_XT32_SD10" # RTX LiDAR preset (32-channel, 10Hz rotation)
+    parent_link: "torso_link" # Mount on torso (stable reference frame)
+    translation: [0.2, 0.0, 0.4] # Forward and up from torso (above camera)
+    orientation: [1.0, 0.0, 0.0, 0.0] # Identity quaternion (w, x, y, z)
+    frame_id: "lidar_link" # ROS2 TF frame name
+    publish_rate: 15 # Point cloud publish rate in Hz
+    min_range: 0.5 # Minimum range in meters (filters self-intersection with robot body)
+    max_range: 100.0 # Maximum range in meters
 
 # Environment Settings
 environment:

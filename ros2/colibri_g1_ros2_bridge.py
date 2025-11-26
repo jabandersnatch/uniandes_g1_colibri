@@ -6,6 +6,7 @@ subscribing to commands.
 Reference: isaac-go2-ros2/ros2/g1_ros2_bridge.py
 """
 
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Time as ROSTime
@@ -14,14 +15,29 @@ import torch
 # ROS2 message types
 from geometry_msgs.msg import PoseStamped, Twist, TransformStamped
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, PointCloud2, PointField
+from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Float32, String
 from visualization_msgs.msg import Marker
-from rosgraph_msgs.msg import Clock
+# Note: Clock msg not needed - /clock published via OmniGraph
 
 # TF2
 import tf2_ros
+from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 from geometry_msgs.msg import TransformStamped
+
+# Camera/Image publishing
+import omni
+import omni.graph.core as og
+import omni.replicator.core as rep
+import omni.syntheticdata._syntheticdata as sd
+
+# Enable ROS2 bridge extension (required for ROS2 image writers)
+ext_manager = omni.kit.app.get_app().get_extension_manager()
+ext_manager.set_extension_enabled_immediate("omni.isaac.ros2_bridge", True)
+
+import subprocess
+import time
 
 
 class RobotDataManager(Node):
@@ -32,6 +48,9 @@ class RobotDataManager(Node):
         /colibri_g1/joint_states (sensor_msgs/JointState): Joint states
         /colibri_g1/pose (geometry_msgs/PoseStamped): Simplified pose
         /colibri_g1/goal_marker (visualization_msgs/Marker): Goal visualization
+        /colibri_g1/lidar/point_cloud (sensor_msgs/PointCloud2): LiDAR point cloud
+        /colibri_g1/front_cam/color_image (sensor_msgs/Image): RGB camera image
+        /colibri_g1/front_cam/depth_image (sensor_msgs/Image): Depth camera image
         /clock (rosgraph_msgs/Clock): Simulation time
 
     Subscribes:
@@ -40,18 +59,29 @@ class RobotDataManager(Node):
     Args:
         env: Isaac Lab environment
         cfg: Configuration object (from ros2_sim.yaml)
+        lidar_annotators: List of LiDAR annotators (one per environment), or None
+        cameras: List of camera instances (one per environment), or None
     """
 
-    def __init__(self, env, cfg):
+    def __init__(self, env, cfg, lidar_annotators=None, cameras=None):
         super().__init__("colibri_g1_ros2_bridge")
 
         # Store references
         self.env = env
         self.cfg = cfg
         self.robot = env.scene["robot"]
+        self.lidar_annotators = lidar_annotators
+        self.cameras = cameras
 
         # ROS2 namespace
         self.namespace = cfg.ros2.namespace
+
+        # Create OmniGraph for clock publishing (matches isaac-go2-ros2 pattern)
+        # This ensures proper simulation time synchronization with RViz
+        self._create_ros_time_graph()
+
+        # Set use_sim_time=true on this node (required for TF synchronization)
+        self._set_use_sim_time()
 
         # Initialize publishers
         self._init_publishers()
@@ -62,11 +92,62 @@ class RobotDataManager(Node):
         # Initialize TF broadcaster
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
+        # Initialize static transforms (e.g., base_link -> lidar_link, base_link -> front_cam)
+        self._publish_static_transforms()
+
+        # Initialize camera publishers (using OmniGraph/Replicator)
+        self._create_camera_publishers()
+
         # State tracking
         self.last_goal_pos = None
-        self.last_goal_marker_time = self.get_clock().now()  # Initialize with ROS Time
+        # Initialize with sim time = 0 (start of simulation)
+        self.last_goal_marker_time = ROSTime(seconds=0, nanoseconds=0)
+
+        # LiDAR publish rate control (wall time)
+        self.lidar_freq = cfg.sensor.lidar.publish_rate if hasattr(cfg.sensor, 'lidar') else 15.0
+        self.last_lidar_pub_time = time.time()
 
         self.get_logger().info(f"ROS2 bridge initialized for {self.namespace}")
+
+    def _create_ros_time_graph(self):
+        """Create OmniGraph for publishing /clock topic with simulation time.
+
+        This uses Isaac Sim's native ROS2 bridge nodes which properly synchronize
+        simulation time with ROS2. This is the recommended approach from isaac-go2-ros2.
+        """
+        keys = og.Controller.Keys
+        og.Controller.edit(
+            {"graph_path": "/ClockActionGraph", "evaluator_name": "execution"},
+            {
+                keys.CREATE_NODES: [
+                    ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
+                    ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                    ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
+                ],
+                keys.CONNECT: [
+                    ("OnPlaybackTick.outputs:tick", "PublishClock.inputs:execIn"),
+                    ("ReadSimTime.outputs:simulationTime", "PublishClock.inputs:timeStamp"),
+                ],
+                keys.SET_VALUES: [
+                    ("PublishClock.inputs:topicName", "/clock"),
+                ],
+            },
+        )
+        self.get_logger().info("OmniGraph clock publisher created for /clock")
+
+    def _set_use_sim_time(self):
+        """Set use_sim_time=true on this node for proper TF synchronization.
+
+        This ensures the node's internal clock uses simulation time instead of
+        wall time, which is required for RViz TF lookups to work correctly.
+        """
+        # Set use_sim_time parameter via subprocess (matches isaac-go2-ros2 pattern)
+        command = ["ros2", "param", "set", "/colibri_g1_ros2_bridge", "use_sim_time", "true"]
+        try:
+            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.get_logger().info("use_sim_time=true set on node")
+        except Exception as e:
+            self.get_logger().warn(f"Failed to set use_sim_time: {e}")
 
     def _init_publishers(self):
         """Create ROS2 publishers."""
@@ -93,8 +174,15 @@ class RobotDataManager(Node):
             String, f"{self.namespace}/navigation/status", 10
         )
 
-        # Clock publisher
-        self.clock_pub = self.create_publisher(Clock, "/clock", 10)
+        # Note: /clock is published via OmniGraph (see _create_ros_time_graph)
+        # This ensures proper simulation time synchronization
+
+        # LiDAR publisher (if enabled)
+        if self.lidar_annotators is not None:
+            self.lidar_pub = self.create_publisher(
+                PointCloud2, f"{self.namespace}/lidar/point_cloud", 10
+            )
+            self.get_logger().info(f"LiDAR publisher created: {self.namespace}/lidar/point_cloud")
 
         self.get_logger().info("Publishers initialized")
 
@@ -116,6 +204,74 @@ class RobotDataManager(Node):
         # For Phase 6.1, this is optional and can be implemented later
         pass
 
+    def _publish_static_transforms(self):
+        """Publish static transforms (e.g., base_link -> lidar_link, base_link -> front_cam).
+
+        Static transforms are published once at startup and remain constant.
+
+        Note: Each transform uses a SEPARATE StaticTransformBroadcaster to avoid
+        overwrites. This matches the pattern in isaac-go2-ros2/ros2/go2_ros2_bridge.py.
+        """
+        # LiDAR static transform: base_link -> lidar_link
+        # Use separate broadcaster for each transform (required to avoid overwrites)
+        if self.lidar_annotators is not None:
+            lidar_broadcaster = StaticTransformBroadcaster(self)
+            lidar_transform = TransformStamped()
+            # Use current sim time for static transforms (matches isaac-go2-ros2)
+            lidar_transform.header.stamp = self.get_clock().now().to_msg()
+            lidar_transform.header.frame_id = "base_link"
+            lidar_transform.child_frame_id = self.cfg.sensor.lidar.frame_id
+
+            # Translation from config (relative to base_link)
+            translation = self.cfg.sensor.lidar.translation
+            lidar_transform.transform.translation.x = float(translation[0])
+            lidar_transform.transform.translation.y = float(translation[1])
+            lidar_transform.transform.translation.z = float(translation[2])
+
+            # Rotation from config (quaternion: w, x, y, z)
+            orientation = self.cfg.sensor.lidar.orientation
+            lidar_transform.transform.rotation.w = float(orientation[0])
+            lidar_transform.transform.rotation.x = float(orientation[1])
+            lidar_transform.transform.rotation.y = float(orientation[2])
+            lidar_transform.transform.rotation.z = float(orientation[3])
+
+            # Publish static transform
+            lidar_broadcaster.sendTransform(lidar_transform)
+            self.get_logger().info(
+                f"Static transform published: base_link -> {self.cfg.sensor.lidar.frame_id}"
+            )
+
+        # Camera static transform: base_link -> front_cam
+        # Use separate broadcaster for each transform (required to avoid overwrites)
+        if self.cameras is not None:
+            camera_broadcaster = StaticTransformBroadcaster(self)
+            camera_transform = TransformStamped()
+            # Use current sim time for static transforms (matches isaac-go2-ros2)
+            camera_transform.header.stamp = self.get_clock().now().to_msg()
+            camera_transform.header.frame_id = "base_link"
+            camera_transform.child_frame_id = self.cfg.sensor.camera.frame_id
+
+            # Translation from config (relative to base_link)
+            translation = self.cfg.sensor.camera.translation
+            camera_transform.transform.translation.x = float(translation[0])
+            camera_transform.transform.translation.y = float(translation[1])
+            camera_transform.transform.translation.z = float(translation[2])
+
+            # Rotation for camera frame (camera looks forward with optical frame convention)
+            # Optical frame: Z forward, X right, Y down
+            # ROS convention needs rotation from base_link to optical frame
+            # Using quaternion that rotates from robot frame to camera optical frame
+            camera_transform.transform.rotation.x = -0.5
+            camera_transform.transform.rotation.y = 0.5
+            camera_transform.transform.rotation.z = -0.5
+            camera_transform.transform.rotation.w = 0.5
+
+            # Publish static transform
+            camera_broadcaster.sendTransform(camera_transform)
+            self.get_logger().info(
+                f"Static transform published: base_link -> {self.cfg.sensor.camera.frame_id}"
+            )
+
     def publish_data(self):
         """Publish all robot data (called every simulation step)."""
         # Compute simulation time for /clock topic
@@ -123,21 +279,26 @@ class RobotDataManager(Node):
         # env.step_dt is the physics timestep * decimation
         sim_time_seconds = float(self.env.unwrapped.common_step_counter * self.env.unwrapped.step_dt)
 
-        # Get current ROS2 time (for message headers)
-        current_time = self.get_clock().now()
+        # Use simulation time for ALL message timestamps (consistency with /clock)
+        # This ensures RViz with use_sim_time=true can correlate TF and sensor data
+        current_time = self._to_ros_time_obj(sim_time_seconds)
 
         # Publish high-frequency topics (50 Hz)
-        # Pass current_time as ROS Time object, not float
         self._publish_odometry(current_time)
         self._publish_joint_states(current_time)
         self._publish_pose(current_time)
         self._publish_transforms(current_time)
-        self._publish_clock(sim_time_seconds)
+        # Note: /clock is published via OmniGraph (see _create_ros_time_graph)
 
         # Publish low-frequency topics (conditionally)
         if self._should_publish_goal_marker(current_time):
             self._publish_goal_marker(current_time)
             self._publish_navigation_metrics(current_time)
+
+        # Publish LiDAR data at configured rate (wall time control)
+        if self.lidar_annotators is not None:
+            if self._should_publish_lidar():
+                self._publish_lidar_data(current_time)
 
     def _publish_odometry(self, current_time):
         """Publish /colibri_g1/odom.
@@ -251,15 +412,8 @@ class RobotDataManager(Node):
         # Broadcast transform
         self.tf_broadcaster.sendTransform(transform)
 
-    def _publish_clock(self, current_time):
-        """Publish /clock.
-
-        Args:
-            current_time: Simulation time (seconds)
-        """
-        msg = Clock()
-        msg.clock = self._to_ros_time(current_time)
-        self.clock_pub.publish(msg)
+    # Note: _publish_clock removed - /clock is now published via OmniGraph
+    # (see _create_ros_time_graph for the OmniGraph-based implementation)
 
     def _publish_goal_marker(self, current_time):
         """Publish /colibri_g1/goal_marker.
@@ -385,20 +539,212 @@ class RobotDataManager(Node):
         return time_diff >= publish_interval_ns
 
     def _to_ros_time(self, sim_time):
-        """Convert simulation time to ROS time.
+        """Convert simulation time to ROS time message.
 
         Args:
             sim_time: Simulation time (seconds)
 
         Returns:
-            ROSTime: ROS timestamp
+            builtin_interfaces/Time: ROS timestamp message
         """
         sec = int(sim_time)
         nanosec = int((sim_time - sec) * 1e9)
         return ROSTime(seconds=sec, nanoseconds=nanosec).to_msg()
 
+    def _to_ros_time_obj(self, sim_time):
+        """Convert simulation time to ROS Time object.
 
-# TODO Phase 6.1: Implement all publisher methods
-# TODO Phase 6.2: Add policy integration
-# TODO Phase 6.3: Add navigation metrics
-# TODO Phase 6.4: Add sensor support (camera, LiDAR)
+        Args:
+            sim_time: Simulation time (seconds)
+
+        Returns:
+            rclpy.time.Time: ROS Time object (supports arithmetic operations)
+        """
+        sec = int(sim_time)
+        nanosec = int((sim_time - sec) * 1e9)
+        return ROSTime(seconds=sec, nanoseconds=nanosec)
+
+    def _should_publish_lidar(self):
+        """Check if LiDAR data should be published based on wall time.
+
+        Returns:
+            bool: True if enough time has passed since last LiDAR publish.
+        """
+        dt_lidar = time.time() - self.last_lidar_pub_time
+        return dt_lidar >= (1.0 / self.lidar_freq)
+
+    def _publish_lidar_data(self, current_time):
+        """Publish /colibri_g1/lidar/point_cloud.
+
+        Args:
+            current_time: ROS2 Time object for message header.
+
+        Note:
+            Point cloud data is retrieved from the RTX LiDAR annotator
+            which returns data in the sensor's local frame.
+            Points are filtered by distance to remove self-intersection artifacts.
+        """
+        # Update last publish time
+        self.last_lidar_pub_time = time.time()
+
+        # Get LiDAR data from annotator (index 0 for single env)
+        try:
+            lidar_data = self.lidar_annotators[0].get_data()
+            if lidar_data is None or "data" not in lidar_data:
+                return
+
+            # Reshape point cloud data to Nx3 array (x, y, z)
+            points = lidar_data["data"].reshape(-1, 3)
+
+            # Filter points by distance to remove self-intersection (robot hitting itself)
+            # Configurable via cfg, defaults: min=0.3m (robot body), max=100m
+            min_range = getattr(self.cfg.sensor.lidar, 'min_range', 0.3)
+            max_range = getattr(self.cfg.sensor.lidar, 'max_range', 100.0)
+
+            # Compute distance from sensor origin for each point
+            distances = np.linalg.norm(points, axis=1)
+
+            # Filter: keep points within valid range
+            valid_mask = (distances >= min_range) & (distances <= max_range)
+            filtered_points = points[valid_mask]
+
+            # Skip publishing if no valid points
+            if len(filtered_points) == 0:
+                return
+
+            # Create PointCloud2 message
+            msg = PointCloud2()
+            msg.header.stamp = current_time.to_msg()
+            msg.header.frame_id = self.cfg.sensor.lidar.frame_id
+
+            # Define point fields (x, y, z as FLOAT32)
+            fields = [
+                PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+                PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+                PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+            ]
+
+            # Create point cloud from numpy array
+            msg = point_cloud2.create_cloud(msg.header, fields, filtered_points)
+
+            # Publish
+            self.lidar_pub.publish(msg)
+
+        except Exception as e:
+            self.get_logger().warn(f"Failed to publish LiDAR data: {e}")
+
+    def _create_camera_publishers(self):
+        """Initialize camera image publishers using OmniGraph.
+
+        This sets up ROS2 image publishers for color and depth cameras using
+        Isaac Sim's OmniGraph nodes which handle the rendering and publishing.
+        This approach is more reliable than the Replicator writers method.
+        """
+        if self.cameras is None:
+            return
+
+        # Check camera configuration
+        if not hasattr(self.cfg.sensor, 'camera'):
+            return
+
+        cam_cfg = self.cfg.sensor.camera
+
+        # Create OmniGraph for camera publishing
+        for i, camera in enumerate(self.cameras):
+            self._create_camera_graph(
+                camera,
+                color_enabled=getattr(cam_cfg, 'color_image', True),
+                depth_enabled=getattr(cam_cfg, 'depth_image', True),
+            )
+
+    def _create_camera_graph(self, camera, color_enabled=True, depth_enabled=True):
+        """Create OmniGraph for camera image publishing.
+
+        Uses og.Controller.edit() to create render product and camera helper nodes
+        directly, which is more reliable than Replicator writers.
+
+        Args:
+            camera: Camera instance with prim_path
+            color_enabled: Whether to publish color images
+            depth_enabled: Whether to publish depth images
+        """
+        # Topic naming
+        color_topic = f"{self.namespace}/front_cam/color_image"
+        depth_topic = f"{self.namespace}/front_cam/depth_image"
+        frame_id = self.cfg.sensor.camera.frame_id
+
+        keys = og.Controller.Keys
+
+        # Build node list
+        nodes_to_create = [
+            ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+            ("IsaacCreateRenderProduct", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+        ]
+
+        # Build values to set
+        values_to_set = [
+            ("IsaacCreateRenderProduct.inputs:cameraPrim", camera.prim_path),
+            ("IsaacCreateRenderProduct.inputs:enabled", True),
+            ("IsaacCreateRenderProduct.inputs:height", self.cfg.sensor.camera.height),
+            ("IsaacCreateRenderProduct.inputs:width", self.cfg.sensor.camera.width),
+        ]
+
+        # Build connections
+        connections = [
+            ("OnPlaybackTick.outputs:tick", "IsaacCreateRenderProduct.inputs:execIn"),
+        ]
+
+        if color_enabled:
+            nodes_to_create.append(
+                ("ROS2CameraHelperColor", "isaacsim.ros2.bridge.ROS2CameraHelper")
+            )
+            values_to_set.extend([
+                ("ROS2CameraHelperColor.inputs:type", "rgb"),
+                ("ROS2CameraHelperColor.inputs:topicName", color_topic),
+                ("ROS2CameraHelperColor.inputs:frameId", frame_id),
+                ("ROS2CameraHelperColor.inputs:useSystemTime", False),
+            ])
+            connections.extend([
+                ("IsaacCreateRenderProduct.outputs:execOut", "ROS2CameraHelperColor.inputs:execIn"),
+                ("IsaacCreateRenderProduct.outputs:renderProductPath", "ROS2CameraHelperColor.inputs:renderProductPath"),
+            ])
+
+        if depth_enabled:
+            nodes_to_create.append(
+                ("ROS2CameraHelperDepth", "isaacsim.ros2.bridge.ROS2CameraHelper")
+            )
+            values_to_set.extend([
+                ("ROS2CameraHelperDepth.inputs:type", "depth"),
+                ("ROS2CameraHelperDepth.inputs:topicName", depth_topic),
+                ("ROS2CameraHelperDepth.inputs:frameId", frame_id),
+                ("ROS2CameraHelperDepth.inputs:useSystemTime", False),
+            ])
+            connections.extend([
+                ("IsaacCreateRenderProduct.outputs:execOut", "ROS2CameraHelperDepth.inputs:execIn"),
+                ("IsaacCreateRenderProduct.outputs:renderProductPath", "ROS2CameraHelperDepth.inputs:renderProductPath"),
+            ])
+
+        # Create the OmniGraph
+        og.Controller.edit(
+            {
+                "graph_path": "/ColibriCameraROS2Graph",
+                "evaluator_name": "execution",
+            },
+            {
+                keys.CREATE_NODES: nodes_to_create,
+                keys.SET_VALUES: values_to_set,
+                keys.CONNECT: connections,
+            },
+        )
+
+        if color_enabled:
+            self.get_logger().info(f"Color image publisher created: {color_topic}")
+        if depth_enabled:
+            self.get_logger().info(f"Depth image publisher created: {depth_topic}")
+
+
+# Completed: Phase 6.1 - ROS2 bridge with all publishers
+# Completed: Phase 6.2 - Policy integration
+# Completed: Phase 6.3 - Navigation metrics
+# Completed: Phase 6.4 - LiDAR sensor support
+# Completed: Phase 6.5 - Camera image publishing (color + depth)

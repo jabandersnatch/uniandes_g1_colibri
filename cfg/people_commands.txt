@@ -1,0 +1,78 @@
+# Colibri G1 People Commands
+# ============================
+#
+# This file defines the behavior of animated characters in the environment.
+# Characters execute these commands in sequence and loop indefinitely.
+#
+# Format: <character_name> <command> <params...>
+#
+# Available Commands:
+#   GoTo <x> <y> <z> <rotation_degrees>  - Walk to position
+#   Idle <duration_seconds>              - Stand still
+#   LookAround <duration_seconds>        - Look left and right
+#
+# Coordinate System:
+#   x: Forward/backward (-3 to +3 typical)
+#   y: Left/right (-3 to +3 typical)
+#   z: Height (1.2 for Colibri Lab floor)
+#   rotation: Facing direction in degrees (0=forward, 90=left, 180=back, 270=right)
+#
+# Notes:
+#   - Character names must match spawn order: Character_0, Character_1, etc.
+#   - Commands are executed sequentially per character
+#   - All characters loop their commands infinitely
+#   - Positions should stay within spawn area to avoid collisions with walls
+
+# ============================================
+# Character 0 - Clockwise patrol pattern
+# ============================================
+# Walks in a square pattern around the center of the room
+
+Character_0 GoTo 2.0 2.0 1.2 0
+Character_0 Idle 2
+Character_0 GoTo 2.0 -2.0 1.2 270
+Character_0 LookAround 2
+Character_0 GoTo -2.0 -2.0 1.2 180
+Character_0 Idle 3
+Character_0 GoTo -2.0 2.0 1.2 90
+Character_0 LookAround 2
+
+# ============================================
+# Character 1 - Counter-clockwise patrol
+# ============================================
+# Walks in opposite direction to Character 0
+
+Character_1 GoTo -3.0 0.0 1.2 270
+Character_1 LookAround 3
+Character_1 GoTo 0.0 3.0 1.2 0
+Character_1 Idle 2
+Character_1 GoTo 3.0 0.0 1.2 90
+Character_1 LookAround 2
+Character_1 GoTo 0.0 -3.0 1.2 180
+Character_1 Idle 2
+
+# ============================================
+# Character 2 (Optional) - Cross pattern
+# ============================================
+# Walks across the center, creating crossing paths
+
+Character_2 GoTo 0.0 2.5 1.2 0
+Character_2 Idle 3
+Character_2 GoTo 0.0 -2.5 1.2 180
+Character_2 LookAround 2
+Character_2 GoTo 0.0 2.5 1.2 0
+Character_2 Idle 2
+
+# ============================================
+# Character 3 (Optional) - Diagonal pattern
+# ============================================
+# Walks diagonally, good for challenging the robot
+
+Character_3 GoTo -2.5 -2.5 1.2 45
+Character_3 LookAround 2
+Character_3 GoTo 2.5 2.5 1.2 225
+Character_3 Idle 3
+Character_3 GoTo -2.5 2.5 1.2 135
+Character_3 LookAround 2
+Character_3 GoTo 2.5 -2.5 1.2 315
+Character_3 Idle 2

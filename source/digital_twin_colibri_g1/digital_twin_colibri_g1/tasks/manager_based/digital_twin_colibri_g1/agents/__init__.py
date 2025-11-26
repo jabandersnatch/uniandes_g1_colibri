@@ -5,6 +5,6 @@
 
 """Agent configurations for Colibri G1 Digital Twin."""
 
-from .rsl_rl_ppo_cfg import ColibriG1PPORunnerCfg, PPORunnerCfg
+from .rsl_rl_ppo_cfg import ColibriG1PPORunnerCfg, ColibriG1SocialNavPPORunnerCfg, PPORunnerCfg
 
-__all__ = ["ColibriG1PPORunnerCfg", "PPORunnerCfg"]
+__all__ = ["ColibriG1PPORunnerCfg", "ColibriG1SocialNavPPORunnerCfg", "PPORunnerCfg"]

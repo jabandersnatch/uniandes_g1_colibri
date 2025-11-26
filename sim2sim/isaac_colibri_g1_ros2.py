@@ -47,11 +47,12 @@ from digital_twin_colibri_g1.tasks.manager_based.digital_twin_colibri_g1 import 
     DigitalTwinColibriG1EnvCfg_PLAY,
 )
 
-# Import ROS2 bridge
+# Import ROS2 bridge and sensor manager
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from ros2.colibri_g1_ros2_bridge import RobotDataManager
+from sensors.colibri_g1_sensors import SensorManager
 
 FILE_PATH = os.path.join(os.path.dirname(__file__), "..", "cfg")
 
@@ -81,6 +82,21 @@ def run_sim2sim(cfg):
     env = ManagerBasedRLEnv(cfg=env_cfg)
     print(f"[INFO] Environment created with {cfg.num_envs} robot(s)")
 
+    # Initialize sensors
+    sensor_manager = SensorManager(cfg.num_envs)
+
+    lidar_annotators = None
+    if cfg.sensor.enable_lidar:
+        print("[INFO] Initializing LiDAR sensors...")
+        lidar_annotators = sensor_manager.add_rtx_lidar(cfg)
+        print(f"[INFO] LiDAR initialized on {cfg.sensor.lidar.parent_link}")
+
+    cameras = None
+    if cfg.sensor.enable_camera:
+        print("[INFO] Initializing cameras...")
+        cameras = sensor_manager.add_camera(cfg)
+        print(f"[INFO] Camera initialized on {cfg.sensor.camera.parent_link}")
+
     # Load trained policy
     print(f"[INFO] Loading policy from {cfg.policy.checkpoint}")
     policy = load_trained_policy(
@@ -93,7 +109,7 @@ def run_sim2sim(cfg):
     # Initialize ROS2
     print("[INFO] Initializing ROS2...")
     rclpy.init()
-    ros2_bridge = RobotDataManager(env, cfg)
+    ros2_bridge = RobotDataManager(env, cfg, lidar_annotators=lidar_annotators, cameras=cameras)
     print("[INFO] ROS2 bridge initialized")
 
     # Get initial observations WITHOUT resetting (matches play script behavior)
@@ -211,7 +227,8 @@ if __name__ == "__main__":
     run_sim2sim()
 
 
-# TODO Phase 6.1: Complete ROS2 bridge integration
-# TODO Phase 6.2: Implement policy loading from checkpoint
-# TODO Phase 6.3: Add navigation metrics logging
-# TODO Phase 6.4: Add sensor support (camera, LiDAR)
+# Completed: Phase 6.1 - ROS2 bridge integration
+# Completed: Phase 6.2 - Policy loading from checkpoint
+# Completed: Phase 6.3 - Navigation metrics logging
+# Completed: Phase 6.4 - LiDAR sensor support
+# Completed: Phase 6.5 - Camera sensor support (color + depth images)
