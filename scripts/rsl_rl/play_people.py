@@ -51,6 +51,19 @@ parser.add_argument(
     help="Use the pre-trained checkpoint from Nucleus.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument(
+    "--people_backend",
+    type=str,
+    default="legacy",
+    choices=["legacy", "ira"],
+    help="Backend for animated people: 'legacy' (omni.anim.people) or 'ira' (isaacsim.replicator.agent)",
+)
+parser.add_argument(
+    "--ira_config",
+    type=str,
+    default="cfg/ira_people_config.yaml",
+    help="Path to IRA config YAML file (if using IRA backend)",
+)
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -72,6 +85,7 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 import omni.usd
+import omni.kit.app
 import os
 import time
 import torch
@@ -91,10 +105,52 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 # Import digital twin tasks
 import digital_twin_colibri_g1.tasks  # noqa: F401
 
-# Import people spawner
+# Import people modules
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from people import PeopleSpawner
+from people import PeopleSceneManager, IRACharacterManager
+
+# Try to import YAML support
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
+
+# ============================================
+# ENABLE ANIMATION EXTENSIONS EARLY
+# This MUST happen before the gym environment is created
+# See: https://forums.developer.nvidia.com/t/isaac-sim-people-simulation-broken-in-4-1-0/301378
+# ============================================
+def enable_animation_extensions():
+    """Enable animation extensions required for omni.anim.people before environment creation."""
+    ext_manager = omni.kit.app.get_app().get_extension_manager()
+
+    # Extensions must be enabled in this order for proper schema registration
+    extensions = [
+        "omni.anim.graph.schema",      # Schema must be first
+        "omni.anim.navigation.schema", # Navigation schema
+        "omni.anim.graph.core",        # Core animation graph
+        "omni.anim.graph.bundle",      # Animation bundle
+        "omni.anim.navigation.bundle", # Navigation bundle
+        "omni.anim.people",            # People extension
+        "omni.kit.scripting",          # Scripting for behavior scripts
+    ]
+
+    print("[People] Enabling animation extensions early (before environment creation)...")
+    for ext in extensions:
+        try:
+            ext_manager.set_extension_enabled_immediate(ext, True)
+            print(f"[People] Pre-enabled: {ext}")
+        except Exception as e:
+            print(f"[People] Warning: Could not pre-enable {ext}: {e}")
+
+    # Update app to ensure extensions are fully loaded
+    simulation_app.update()
+    print("[People] Animation extensions pre-enabled successfully")
+
+# Enable extensions immediately
+enable_animation_extensions()
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
@@ -130,22 +186,66 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: RslRlBaseRunnerCfg):
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 
     # ============================================
-    # SPAWN ANIMATED PEOPLE
+    # ADD ANIMATED PEOPLE TO SCENE
     # ============================================
-    print("[INFO] Spawning animated people...")
+    print("\n[INFO] ========== PEOPLE SCENE INITIALIZATION ==========")
     stage = omni.usd.get_context().get_stage()
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-    # Check if environment has people configuration
-    if hasattr(env_cfg, 'people'):
-        people_spawner = PeopleSpawner(env_cfg.people, project_root)
-        # Spawn people in each environment (or just env 0 for single-env play)
-        num_envs_to_spawn = min(env_cfg.scene.num_envs, 4)  # Limit for performance
-        for env_idx in range(num_envs_to_spawn):
-            people_spawner.initialize(stage, env_idx=env_idx)
-        print(f"[INFO] People spawned in {num_envs_to_spawn} environment(s)")
+    # Initialize people based on selected backend
+    if args_cli.people_backend == "ira":
+        # Use new IRA backend
+        print(f"[INFO] Using IRA backend for animated people")
+        print(f"[INFO] Loading config from: {args_cli.ira_config}")
+
+        # Load IRA configuration
+        ira_config_path = os.path.join(project_root, args_cli.ira_config)
+        if os.path.exists(ira_config_path) and YAML_AVAILABLE:
+            with open(ira_config_path, 'r') as f:
+                ira_config = yaml.safe_load(f)
+            print(f"[INFO] ✓ Loaded IRA config from {ira_config_path}")
+        else:
+            if not YAML_AVAILABLE:
+                print(f"[INFO] ⚠ PyYAML not available - using fallback config")
+            else:
+                print(f"[INFO] ⚠ Config file not found - using fallback config")
+            ira_config = None
+
+        # Create IRA manager
+        people_manager = IRACharacterManager(
+            config=ira_config,
+            project_root=project_root,
+            verbose=True,
+        )
+        success = people_manager.initialize()
+
+        if success:
+            num_chars = people_manager.get_character_count()
+            print(f"[INFO] ✓ IRA initialization successful ({num_chars} characters)")
+        else:
+            print(f"[INFO] ✗ IRA initialization failed - continuing with empty scene")
+
     else:
-        print("[WARN] Environment does not have people configuration")
+        # Use legacy PeopleSceneManager backend
+        print(f"[INFO] Using legacy backend for animated people (omni.anim.people)")
+
+        # Get people configuration - use env_cfg.people if available, otherwise create default
+        if hasattr(env_cfg, 'people'):
+            people_cfg = env_cfg.people
+            print("[INFO] Using people configuration from environment")
+        else:
+            # Import and create default people configuration
+            from digital_twin_colibri_g1.tasks.manager_based.digital_twin_colibri_g1.people_env_cfg import PeopleManagerCfg
+            people_cfg = PeopleManagerCfg()
+            print("[INFO] Using default people configuration")
+
+        # Create people scene manager and add characters to world
+        # Characters are added as GLOBAL assets (not per-environment)
+        people_manager = PeopleSceneManager(people_cfg, project_root)
+        people_manager.initialize(stage)
+        print(f"[INFO] ✓ Legacy initialization complete")
+
+    print("[INFO] ===================================================\n")
 
     # wrap for video recording
     if args_cli.video:

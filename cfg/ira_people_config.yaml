@@ -1,0 +1,145 @@
+# IRA People Configuration
+# ========================
+# Declarative configuration for animated characters using IRA (isaacsim.replicator.agent)
+
+# ============================================
+# Simulation Settings
+# ============================================
+simulation:
+  headless: false                       # Run without GUI
+  headless_timeout: 300                 # Seconds before auto-exit (headless mode)
+  real_time: false                      # Run at real-time speed
+  verbose: true                         # Detailed logging
+
+# ============================================
+# Command File & Behavior
+# ============================================
+behavior:
+  command_file: "cfg/people_commands.txt"  # Path to character commands
+  loop_commands: true                      # Repeat sequences indefinitely
+  playback_speed: 1.0                      # Animation speed multiplier (0.5-2.0)
+
+# ============================================
+# Character Configuration
+# ============================================
+characters:
+  num_characters: 2                     # Number of characters to spawn
+
+  # Cloud asset library URLs (NVIDIA Isaac Sim Cloud)
+  assets:
+    - name: "Female_Business_01"
+      url: "https://d36m3dsta5ufqu.cloudfront.net/Isaac-Sim-Assets/Isaac/2023.10/Isaac-Sim-4.5.0/Characters/Female_Business_01.usd"
+    - name: "Female_Business_02"
+      url: "https://d36m3dsta5ufqu.cloudfront.net/Isaac-Sim-Assets/Isaac/2023.10/Isaac-Sim-4.5.0/Characters/Female_Business_02.usd"
+
+  # Character spawn configuration
+  spawn:
+    # Spawn area bounds (meters)
+    area_min: [-3.0, -3.0]              # Min X, Y
+    area_max: [3.0, 3.0]                # Max X, Y
+    height: 1.2                         # Z coordinate (Colibri Lab floor height)
+
+    # Initial positions (override if num_characters > 2)
+    initial_positions:
+      - [1.5, 1.0, 1.2]                # Character_0: front-left
+      - [2.0, -1.0, 1.2]               # Character_1: front-right
+
+    # Random seed for reproducibility
+    random_seed: 42
+
+  # Animation settings
+  animation:
+    root_path: "/World/Characters"      # Global character root (NOT per-environment)
+    enable_physics: false               # Disable physics (kinematic only)
+    capsule_radius: 0.35                # Character collision radius
+    capsule_height: 1.8                 # Character collision height
+
+# ============================================
+# NavMesh Configuration
+# ============================================
+navmesh:
+  enabled: true                         # Enable NavMesh for pathfinding
+  create_method: "auto"                 # "auto" = create from bounds, "usd" = load from file
+
+  # Auto-generation method
+  auto_generation:
+    # NavMesh bounds (larger than spawn area)
+    bounds_min: [-4.0, -4.0, 0.5]       # Min X, Y, Z
+    bounds_max: [4.0, 4.0, 0.5]         # Max X, Y, Z
+
+    # NavMesh parameters
+    cell_size: 0.2                      # Navigation grid resolution
+    walkable_height: 2.0                # Max traversable height
+    walkable_radius: 0.35               # Character radius (match capsule_radius)
+    max_slope: 45.0                     # Max walkable slope (degrees)
+
+  # Alternative: Load from USD file
+  usd_path: null                        # Set to load pre-built NavMesh from USD
+
+# ============================================
+# IRA Extensions (Load Order CRITICAL)
+# ============================================
+extensions:
+  # Load schemas first
+  - "omni.anim.graph.schema"            # Animation graph schema
+  - "omni.anim.navigation.schema"       # Navigation schema
+
+  # Load core implementations
+  - "omni.anim.graph.core"              # Animation graph core
+  - "omni.anim.navigation.core"         # Navigation core
+
+  # Load IRA and scripting
+  - "omni.replicator.agent"             # IRA main extension
+  - "omni.kit.scripting"                # Scripting API support
+
+  # Optional: Animation utilities
+  - "omni.anim.people"                  # Legacy (for compatibility)
+
+# ============================================
+# Logging & Debugging
+# ============================================
+logging:
+  level: "INFO"                         # DEBUG, INFO, WARNING, ERROR
+  prefix: "[IRA People]"               # Log prefix
+
+  # What to log
+  extension_status: true                # Extension enable/disable
+  character_spawning: true              # Character spawn details
+  navmesh_validation: true              # NavMesh coverage checks
+  command_execution: true               # Command parsing and execution
+  simulation_state: true                # Character positions and animations
+
+# ============================================
+# Diagnostics
+# ============================================
+diagnostics:
+  enabled: true                         # Enable diagnostic reporting
+  check_frequency: 10                   # Frames between diagnostics
+
+  # Checks to perform
+  checks:
+    character_positions: true           # Monitor character movement
+    animation_state: true               # Check animation playback state
+    pathfinding_success: true           # Verify GoTo commands work
+    command_execution: true             # Verify commands execute
+    performance_metrics: true           # FPS, simulation time, etc.
+
+# ============================================
+# Advanced Settings
+# ============================================
+advanced:
+  # IRA-specific settings
+  ira:
+    # Agent behavior settings
+    agent_type: "character"             # Type of agent to create
+    behavior_tree: "default"            # Behavior tree style
+
+    # Animation parameters
+    anim_scale: 1.0                     # Character size scaling
+    locomotion_type: "human"            # Locomotion style (human, quadruped, etc.)
+
+  # Performance tuning
+  performance:
+    max_command_buffer: 100             # Max queued commands per character
+    update_rate: 60                     # Target update rate (Hz)
+    enable_gpu_sim: true                # Use GPU physics if available
