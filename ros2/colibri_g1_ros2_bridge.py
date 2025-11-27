@@ -570,6 +570,96 @@ class ColibriG1RobotDataManager(Node):
         """
         return (self.cmd_vel_linear.clone(), self.cmd_vel_angular.clone(), self.use_cmd_vel)
 
+    # ===========================
+    # Camera Publishing
+    # ===========================
+
+    def _create_camera_publishers(self):
+        """Initialize camera image publishers using OmniGraph."""
+        if not hasattr(self.cfg.sensor, "camera"):
+            return
+
+        cam_cfg = self.cfg.sensor.camera
+
+        for i, camera in enumerate(self.cameras):
+            self._create_camera_graph(
+                camera,
+                color_enabled=getattr(cam_cfg, "color_image", True),
+                depth_enabled=getattr(cam_cfg, "depth_image", True),
+            )
+
+    def _create_camera_graph(self, camera, color_enabled=True, depth_enabled=True):
+        """Create OmniGraph for camera image publishing."""
+        color_topic = "/front_cam/color_image"
+        depth_topic = "/front_cam/depth_image"
+        frame_id = self.cfg.sensor.camera.frame_id
+
+        keys = og.Controller.Keys
+
+        nodes_to_create = [
+            ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+            ("IsaacCreateRenderProduct", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+        ]
+
+        values_to_set = [
+            ("IsaacCreateRenderProduct.inputs:cameraPrim", camera.prim_path),
+            ("IsaacCreateRenderProduct.inputs:enabled", True),
+            ("IsaacCreateRenderProduct.inputs:height", self.cfg.sensor.camera.height),
+            ("IsaacCreateRenderProduct.inputs:width", self.cfg.sensor.camera.width),
+        ]
+
+        connections = [
+            ("OnPlaybackTick.outputs:tick", "IsaacCreateRenderProduct.inputs:execIn"),
+        ]
+
+        if color_enabled:
+            nodes_to_create.append(("ROS2CameraHelperColor", "isaacsim.ros2.bridge.ROS2CameraHelper"))
+            values_to_set.extend(
+                [
+                    ("ROS2CameraHelperColor.inputs:type", "rgb"),
+                    ("ROS2CameraHelperColor.inputs:topicName", color_topic),
+                    ("ROS2CameraHelperColor.inputs:frameId", frame_id),
+                    ("ROS2CameraHelperColor.inputs:useSystemTime", False),
+                ]
+            )
+            connections.extend(
+                [
+                    ("IsaacCreateRenderProduct.outputs:execOut", "ROS2CameraHelperColor.inputs:execIn"),
+                    ("IsaacCreateRenderProduct.outputs:renderProductPath", "ROS2CameraHelperColor.inputs:renderProductPath"),
+                ]
+            )
+
+        if depth_enabled:
+            nodes_to_create.append(("ROS2CameraHelperDepth", "isaacsim.ros2.bridge.ROS2CameraHelper"))
+            values_to_set.extend(
+                [
+                    ("ROS2CameraHelperDepth.inputs:type", "depth"),
+                    ("ROS2CameraHelperDepth.inputs:topicName", depth_topic),
+                    ("ROS2CameraHelperDepth.inputs:frameId", frame_id),
+                    ("ROS2CameraHelperDepth.inputs:useSystemTime", False),
+                ]
+            )
+            connections.extend(
+                [
+                    ("IsaacCreateRenderProduct.outputs:execOut", "ROS2CameraHelperDepth.inputs:execIn"),
+                    ("IsaacCreateRenderProduct.outputs:renderProductPath", "ROS2CameraHelperDepth.inputs:renderProductPath"),
+                ]
+            )
+
+        og.Controller.edit(
+            {"graph_path": "/ColibriCameraROS2Graph", "evaluator_name": "execution"},
+            {
+                keys.CREATE_NODES: nodes_to_create,
+                keys.SET_VALUES: values_to_set,
+                keys.CONNECT: connections,
+            },
+        )
+
+        if color_enabled:
+            self.get_logger().info(f"Color image publisher: {color_topic}")
+        if depth_enabled:
+            self.get_logger().info(f"Depth image publisher: {depth_topic}")
+
 
 # Backward compatibility aliases for old code (deprecated)
 G1PubNode = ColibriG1RobotDataManager
