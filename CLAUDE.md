@@ -104,20 +104,41 @@ These are useful for verifying environment configuration.
 ### Package Structure
 
 ```
-source/digital_twin_colibri_g1/
-└── digital_twin_colibri_g1/
-    ├── tasks/
-    │   └── manager_based/
-    │       └── digital_twin_colibri_g1/
-    │           ├── __init__.py                    # Gym environment registration
-    │           ├── digital_twin_colibri_g1_env_cfg.py  # Environment configurations
-    │           ├── agents/
-    │           │   ├── rsl_rl_ppo_cfg.py         # RSL-RL PPO configuration
-    │           │   └── skrl_ppo_cfg.yaml         # SKRL PPO configuration
-    │           └── mdp/
-    │               ├── __init__.py
-    │               └── rewards.py                # Custom reward functions
-    └── ui_extension_example.py                   # Omniverse UI extension (optional)
+digital_twin_colibri_g1/
+├── source/digital_twin_colibri_g1/
+│   └── digital_twin_colibri_g1/
+│       ├── tasks/
+│       │   └── manager_based/
+│       │       └── digital_twin_colibri_g1/
+│       │           ├── __init__.py                    # Gym environment registration
+│       │           ├── digital_twin_colibri_g1_env_cfg.py  # Base environment config
+│       │           ├── people_env_cfg.py              # People environment config
+│       │           ├── social_nav_env_cfg.py          # Social navigation config
+│       │           ├── agents/
+│       │           │   ├── rsl_rl_ppo_cfg.py         # RSL-RL PPO configurations
+│       │           │   └── skrl_ppo_cfg.yaml         # SKRL PPO configuration
+│       │           └── mdp/
+│       │               ├── __init__.py
+│       │               └── rewards.py                # Custom reward functions
+│       └── ui_extension_example.py                   # Omniverse UI extension (optional)
+├── sensors/
+│   ├── __init__.py
+│   └── colibri_g1_sensors.py      # RTX LiDAR sensor manager
+├── people/
+│   ├── __init__.py
+│   └── people_spawner.py          # Animated character spawner
+├── ros2/
+│   ├── colibri_g1_ros2_bridge.py  # ROS2 bridge with publishers
+│   └── colibri_g1_ros2_utils.py   # Conversion utilities
+├── sim2sim/
+│   └── isaac_colibri_g1_ros2.py   # Sim2sim entry point
+├── cfg/
+│   ├── ros2_sim.yaml              # Sim2sim configuration
+│   └── people_commands.txt        # Character behavior commands
+└── scripts/rsl_rl/
+    ├── train.py                   # Training script
+    ├── play.py                    # Play script
+    └── play_people.py             # Play with people script
 ```
 
 ### Key Components
@@ -306,20 +327,45 @@ The sim2sim bridge publishes:
 | `/colibri_g1/odom` | `nav_msgs/Odometry` | 50 Hz | Full odometry (pose + twist) |
 | `/colibri_g1/joint_states` | `sensor_msgs/JointState` | 50 Hz | 29-DOF joint positions/velocities |
 | `/colibri_g1/pose` | `geometry_msgs/PoseStamped` | 10 Hz | Simplified pose only |
-| `/tf` | `tf2_msgs/TFMessage` | 50 Hz | Transform: map → base_link |
+| `/tf` | `tf2_msgs/TFMessage` | 50 Hz | Transform: map → base_link → lidar_link |
 | `/colibri_g1/goal_marker` | `visualization_msgs/Marker` | 10 Hz | Goal visualization (color-coded) |
 | `/colibri_g1/navigation_metrics` | Custom | 10 Hz | Distance to goal, status |
+| `/colibri_g1/lidar/point_cloud` | `sensor_msgs/PointCloud2` | 15 Hz | RTX LiDAR point cloud |
 | `/clock` | `rosgraph_msgs/Clock` | Sim rate | Simulation time |
+
+### ROS2 Architecture (Unified Single-Node Pattern)
+
+**Design**: Phase 6 uses a **unified single-node ROS2 architecture** (not multiple separate nodes):
+
+- **Single Node**: `ColibriG1RobotDataManager(Node)` - Combines all publishers and subscribers
+- **Advantages**: Simpler code, no threading complexity, easier debugging
+- **Callbacks**: Handled via `rclpy.spin_once()` in main loop (non-blocking)
+- **Backward Compatible**: Aliases `RobotDataManager` and `G1PubNode`/`G1SubNode` point to the unified node
+
+This matches the proven pattern from `isaac-go2-ros2` and avoids threading issues while maintaining full functionality.
 
 ### Key Files
 
 **ROS2 Bridge**:
-- `ros2/colibri_g1_ros2_bridge.py` - Main bridge (6 publishers implemented)
+- `ros2/colibri_g1_ros2_bridge.py` - Unified ROS2 node (publishers + subscribers in single class)
 - `ros2/colibri_g1_ros2_utils.py` - Conversion utilities (torch ↔ ROS2)
 
 **Sim2Sim Entry Point**:
 - `sim2sim/isaac_colibri_g1_ros2.py` - Main script with policy loading
 - `cfg/ros2_sim.yaml` - Hydra configuration
+
+**Sensors**:
+- `sensors/colibri_g1_sensors.py` - RTX LiDAR sensor manager
+- `sensors/__init__.py` - Sensor module exports
+
+**People (Animated Characters)**:
+- `people/people_spawner.py` - Animated character spawner using omni.anim.people
+- `people/__init__.py` - People module exports
+- `cfg/people_commands.txt` - Character behavior command sequences
+
+**Environment Configurations**:
+- `source/.../people_env_cfg.py` - People environment config
+- `source/.../social_nav_env_cfg.py` - Social navigation environment config
 
 **Docker**:
 - `docker/Dockerfile` - Multi-stage build (5 stages)
@@ -331,6 +377,8 @@ The sim2sim bridge publishes:
 - `README_ROS2.md` - ROS2 integration guide
 - `docs/SIM2SIM_ROS2.md` - Architecture and design
 - `docs/DEPENDENCIES.md` - Dependency management (pip + apt)
+- `docs/PEOPLE_CONTROLLER.md` - Animated people documentation
+- `docs/IMPLEMENTATION_PLAN.md` - LiDAR, People, Social Nav implementation plan
 - `docker/NETWORK_TROUBLESHOOTING.md` - Docker networking issues
 - `NEXT_STEPS.md` - Post-implementation testing guide
 
@@ -430,3 +478,205 @@ After validating Phase 6, the next step is deploying to the physical Colibri G1 
 - Add sensor feedback (IMU, cameras, force-torque)
 - Implement safety constraints and emergency stop
 - Real-world domain randomization validation
+
+---
+
+## LiDAR Sensor Integration
+
+### Overview
+
+The sim2sim script includes RTX LiDAR support for environmental perception, publishing point cloud data via ROS2 for visualization and navigation.
+
+### Configuration
+
+**File**: `cfg/ros2_sim.yaml`
+
+```yaml
+sensor:
+  enable_lidar: true                    # Enable/disable LiDAR
+  lidar:
+    config: "Hesai_XT32_SD10"           # 32-channel LiDAR preset
+    parent_link: "head_link"            # Mount point on robot
+    translation: [0.0, 0.0, 0.1]        # Offset from parent link
+    orientation: [1.0, 0.0, 0.0, 0.0]   # Quaternion (w, x, y, z)
+    frame_id: "lidar_link"              # ROS2 TF frame
+    publish_rate: 15                    # Point cloud rate (Hz)
+```
+
+### ROS2 Topic
+
+- **Topic**: `/colibri_g1/lidar/point_cloud`
+- **Type**: `sensor_msgs/PointCloud2`
+- **Rate**: 15 Hz
+- **Frame**: `lidar_link`
+
+### TF Tree
+
+```
+map
+ └── base_link
+      └── lidar_link (static transform from config)
+```
+
+### Testing LiDAR
+
+```bash
+# Check LiDAR topic exists
+ros2 topic list | grep lidar
+
+# Verify publish rate
+ros2 topic hz /colibri_g1/lidar/point_cloud
+# Expected: ~15 Hz
+
+# View point cloud data
+ros2 topic echo /colibri_g1/lidar/point_cloud --once
+
+# Visualize in RViz2
+rviz2
+# Add: PointCloud2, Topic: /colibri_g1/lidar/point_cloud
+# Set: Fixed Frame: map or lidar_link
+```
+
+### Key Files
+
+- `sensors/colibri_g1_sensors.py` - `SensorManager` class with `add_rtx_lidar()` method
+- `ros2/colibri_g1_ros2_bridge.py:462-512` - PointCloud2 publishing logic
+
+---
+
+## Animated People (Training with Dynamic Obstacles)
+
+### Overview
+
+The project supports spawning animated human characters using Isaac Sim's `omni.anim.people` extension. Characters serve as dynamic obstacles for training social navigation policies.
+
+### Task Variants
+
+| Task ID | Purpose | num_envs | Characters |
+|---------|---------|----------|------------|
+| `Isaac-Colibri-G1-People-v0` | Training | 64 | 2 |
+| `Isaac-Colibri-G1-People-Play-v0` | Visualization | 4 | 2 |
+
+### Quick Start
+
+```bash
+# Play with animated people
+python scripts/rsl_rl/play_people.py --num_envs 2
+
+# Or use the registered task
+python scripts/rsl_rl/play.py --task=Isaac-Colibri-G1-People-Play-v0 --num_envs 2
+
+# Train with people as obstacles
+python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-People-v0 --num_envs 64 --headless
+```
+
+### Configuration
+
+**File**: `people_env_cfg.py`
+
+```python
+@configclass
+class PeopleManagerCfg:
+    num_characters: int = 2              # Characters per environment
+    command_file: str = "cfg/people_commands.txt"
+    spawn_area_min: tuple = (-3.0, -3.0) # Spawn area bounds
+    spawn_area_max: tuple = (3.0, 3.0)
+    spawn_height: float = 1.2            # Colibri floor height
+    navmesh_enabled: bool = False        # Use fixed waypoints
+    dynamic_avoidance: bool = True       # Characters avoid each other
+    loop_commands: bool = True           # Repeat command sequence
+```
+
+### Command File Format
+
+**File**: `cfg/people_commands.txt`
+
+```txt
+# Character behavior commands
+Character_0 GoTo 2.0 2.0 1.2 90      # Walk to position, face direction
+Character_0 Idle 3                   # Stand still for 3 seconds
+Character_0 LookAround 2             # Look left/right for 2 seconds
+Character_0 GoTo -2.0 2.0 1.2 180   # Continue patrol
+```
+
+### Available Commands
+
+| Command | Parameters | Description |
+|---------|------------|-------------|
+| `GoTo` | `x y z rotation` | Walk to position, face direction (degrees) |
+| `Idle` | `duration_seconds` | Stand still |
+| `LookAround` | `duration_seconds` | Look left and right |
+
+### Key Files
+
+- `people/people_spawner.py` - `PeopleSpawner` class
+- `cfg/people_commands.txt` - Character behavior sequences
+- `scripts/rsl_rl/play_people.py` - Play script with people
+- `docs/PEOPLE_CONTROLLER.md` - Detailed documentation
+
+---
+
+## Social Navigation (LiDAR + People + Social Rewards)
+
+### Overview
+
+Combines LiDAR perception with animated people for human-aware navigation training. The robot learns to navigate to goals while maintaining appropriate distances from humans.
+
+### Task Variants
+
+| Task ID | Purpose | num_envs |
+|---------|---------|----------|
+| `Isaac-Colibri-G1-SocialNav-v0` | Training | 256 |
+| `Isaac-Colibri-G1-SocialNav-Play-v0` | Visualization | 4 |
+
+### Observation Space Extension
+
+- **`lidar_sectors`**: 16-dimensional tensor (minimum distance per 22.5° angular sector)
+
+### Social Navigation Rewards
+
+| Reward | Weight | Threshold | Description |
+|--------|--------|-----------|-------------|
+| `human_proximity` | -0.5 | 1.5m | Penalty for approaching humans |
+| `personal_space` | -2.0 | 0.8m | Strong penalty for space violation |
+| `smooth_trajectory` | +0.1 | - | Reward for non-jerky movements |
+
+### Quick Start
+
+```bash
+# Test social navigation task
+python scripts/rsl_rl/play.py --task=Isaac-Colibri-G1-SocialNav-Play-v0 --num_envs 2
+
+# Train social navigation policy
+python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-SocialNav-v0 \
+  --num_envs 256 --headless --max_iterations 3000
+```
+
+### PPO Configuration
+
+**Class**: `ColibriG1SocialNavPPORunnerCfg`
+
+- **Network**: `[512, 512, 256, 128]` (larger than base for LiDAR processing)
+- **Learning Rate**: 5e-4
+- **Max Iterations**: 3000
+- **Entropy Coefficient**: 0.01
+
+### Key Files
+
+- `source/.../social_nav_env_cfg.py` - Environment configuration
+- `source/.../mdp/rewards.py` - Social navigation reward functions
+- `source/.../agents/rsl_rl_ppo_cfg.py` - `ColibriG1SocialNavPPORunnerCfg`
+
+### Implementation Status
+
+| Component | Status |
+|-----------|--------|
+| Environment Config | Complete |
+| Task Registration | Complete |
+| Agent Config | Complete |
+| `lidar_sector_distances()` | Placeholder (returns dummy values) |
+| `human_proximity_penalty()` | Placeholder (returns dummy values) |
+| `personal_space_violation()` | Placeholder (returns dummy values) |
+| `smooth_trajectory_reward()` | Complete |
+
+**Note**: Placeholder functions work for testing infrastructure but return dummy values. Full implementation requires integrating LiDAR sensor data and character position tracking into the reward functions.

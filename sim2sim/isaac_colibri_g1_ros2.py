@@ -51,7 +51,7 @@ from digital_twin_colibri_g1.tasks.manager_based.digital_twin_colibri_g1 import 
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from ros2.colibri_g1_ros2_bridge import RobotDataManager
+from ros2.colibri_g1_ros2_bridge import ColibriG1RobotDataManager
 from sensors.colibri_g1_sensors import SensorManager
 
 FILE_PATH = os.path.join(os.path.dirname(__file__), "..", "cfg")
@@ -109,7 +109,7 @@ def run_sim2sim(cfg):
     # Initialize ROS2
     print("[INFO] Initializing ROS2...")
     rclpy.init()
-    ros2_bridge = RobotDataManager(env, cfg, lidar_annotators=lidar_annotators, cameras=cameras)
+    ros2_manager = ColibriG1RobotDataManager(env, cfg, lidar_annotators=lidar_annotators, cameras=cameras)
     print("[INFO] ROS2 bridge initialized")
 
     # Get initial observations WITHOUT resetting (matches play script behavior)
@@ -135,9 +135,9 @@ def run_sim2sim(cfg):
             # Environment automatically resets terminated envs, so obs is always valid
             obs, _, _, _, _ = env.step(actions)
 
-            # Publish ROS2 data
-            ros2_bridge.publish_data()
-            rclpy.spin_once(ros2_bridge, timeout_sec=0)
+            # Publish ROS2 data and process callbacks
+            ros2_manager.publish_data()
+            rclpy.spin_once(ros2_manager, timeout_sec=0)
 
             # Maintain loop rate
             elapsed_time = time.time() - start_time
@@ -159,7 +159,7 @@ def run_sim2sim(cfg):
 
     # Cleanup
     print("\n[INFO] Shutting down...")
-    ros2_bridge.destroy_node()
+    ros2_manager.destroy_node()
     rclpy.shutdown()
     simulation_app.close()
     print("[INFO] Shutdown complete")
