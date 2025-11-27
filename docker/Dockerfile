@@ -136,11 +136,11 @@ RUN if [ ! -f /unitree_ros2_ws/install/setup.bash ]; then \
     fi && \
     echo "[SUCCESS] Unitree workspace built successfully"
 
-# Verify Python packages were generated
+# Verify Python packages were generated (use python3 which is available in this stage)
 RUN /bin/bash -c "source /unitree_ros2_ws/install/setup.bash && \
-    python -c \"import unitree_hg.msg; print('[SUCCESS] unitree_hg.msg importable after build')\" && \
-    python -c \"import unitree_go.msg; print('[SUCCESS] unitree_go.msg importable after build')\" && \
-    python -c \"import unitree_api.msg; print('[SUCCESS] unitree_api.msg importable after build')\""
+    python3 -c \"import unitree_hg.msg; print('[SUCCESS] unitree_hg.msg importable after build')\" && \
+    python3 -c \"import unitree_go.msg; print('[SUCCESS] unitree_go.msg importable after build')\" && \
+    python3 -c \"import unitree_api.msg; print('[SUCCESS] unitree_api.msg importable after build')\""
 
 # Add unitree workspace to bashrc
 RUN echo "source /unitree_ros2_ws/install/setup.bash" >> /root/.bashrc
@@ -150,7 +150,7 @@ RUN echo "=== Unitree ROS2 Workspace ===" && \
     ls -lah /unitree_ros2_ws/install/ && \
     echo "" && \
     echo "=== Python packages installed ===" && \
-    find /unitree_ros2_ws/install -name "unitree_*.egg-info" -type d
+    find /unitree_ros2_ws/install -name "unitree_*.egg-info" -type d || echo "Note: egg-info may not be present in all builds"
 
 ######################################################################
 # Stage 4: Install Development Tools & Isaac Lab
