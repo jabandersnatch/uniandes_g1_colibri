@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for Colibri G1 Digital Twin with ROS2
-# Phase 6: Sim2Sim ROS2 Integration
+# Phase 7: Unitree G1 Real Robot Compatibility
 #
 # Build: docker build -t colibri_g1_ros2:latest -f docker/Dockerfile .
 # Run: docker-compose up or ./docker/launch.sh sim2sim
@@ -8,7 +8,8 @@
 #   - NVIDIA Isaac Sim 4.5.0: https://catalog.ngc.nvidia.com/orgs/nvidia/containers/isaac-sim
 #   - Isaac Lab Docker Guide: https://isaac-sim.github.io/IsaacLab/main/source/deployment/docker.html
 #   - ROS2 Humble: https://docs.ros.org/en/humble/
-#   - isaac-go2-ros2 Dockerfile: Reference implementation
+#   - unitree_ros2: https://github.com/unitreerobotics/unitree_ros2
+#   - go2_isaac_ros2: https://github.com/CLeARoboticsLab/go2_isaac_ros2
 
 ######################################################################
 # Stage 1: Isaac Sim 4.5.0 Base (Ubuntu 22.04)
@@ -20,8 +21,8 @@ FROM nvcr.io/nvidia/isaac-sim:4.5.0 AS isaac_base
 
 LABEL org.opencontainers.image.title="Colibri G1 Digital Twin ROS2"
 LABEL org.opencontainers.image.authors="Colibri G1 Team"
-LABEL org.opencontainers.image.version="0.1.0"
-LABEL org.opencontainers.image.description="Isaac Sim 4.5.0 + Isaac Lab 2.2 + ROS2 Humble + Colibri G1 Digital Twin"
+LABEL org.opencontainers.image.version="0.2.0"
+LABEL org.opencontainers.image.description="Isaac Sim 4.5.0 + Isaac Lab 2.2 + ROS2 Humble + Unitree G1 Messages"
 
 # Set environment variables
 ENV LANG=C.UTF-8
@@ -30,10 +31,10 @@ ENV ACCEPT_EULA=Y
 ENV PRIVACY_CONSENT=Y
 
 ######################################################################
-# Stage 2: Install ROS2 Humble
+# Stage 2: Install ROS2 Humble + Unitree Dependencies
 # - ROS2 Humble Desktop (includes RViz2)
-# - TF2 packages for transforms
-# - CycloneDDS middleware for better performance
+# - CycloneDDS middleware (required for Unitree robots)
+# - rosidl-generator-dds-idl (required for unitree message generation)
 ######################################################################
 
 FROM isaac_base AS ros2_layer
@@ -74,28 +75,91 @@ RUN apt-get update && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install ROS2 Humble Desktop with key packages
+# CRITICAL: Include unitree_ros2 dependencies per README:
+#   - ros-humble-rmw-cyclonedds-cpp (CycloneDDS middleware)
+#   - ros-humble-rosidl-generator-dds-idl (for unitree message generation)
+#   - libyaml-cpp-dev (required dependency)
 RUN apt-get update && apt-get install -y \
     ros-humble-desktop \
     ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-rosidl-generator-dds-idl \
     ros-humble-tf2-ros \
     ros-humble-tf2-geometry-msgs \
     ros-humble-foxglove-bridge \
     ros-humble-cv-bridge \
     python3-colcon-common-extensions \
     python3-rosdep \
+    libyaml-cpp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Initialize rosdep
 RUN rosdep init || true && rosdep update
 
 ######################################################################
-# Stage 3: Install Development Tools & Isaac Lab
+# Stage 3: Build Unitree ROS2 Messages
+# - unitree_api: API messages for all robots
+# - unitree_go: Go2/B2 messages (20 motors)
+# - unitree_hg: G1/H1-2 messages (35 motors) - REQUIRED FOR G1
+#
+# Per unitree_ros2 README: For Humble, CycloneDDS compile can be skipped
+# (already compatible version in ros-humble-rmw-cyclonedds-cpp)
+######################################################################
+
+FROM ros2_layer AS unitree_msgs_layer
+
+USER root
+
+# Create ROS2 workspace for Unitree messages
+RUN mkdir -p /unitree_ros2_ws/src
+
+# Copy unitree message packages from local context
+# These are copied from unitree_ros2/cyclonedds_ws/src/unitree/
+# Build context must include these files (see docker-compose volumes or COPY)
+COPY unitree_msgs/unitree_api /unitree_ros2_ws/src/unitree_api
+COPY unitree_msgs/unitree_go /unitree_ros2_ws/src/unitree_go
+COPY unitree_msgs/unitree_hg /unitree_ros2_ws/src/unitree_hg
+
+# Build Unitree message packages
+# Per README: Source ROS2 first, then colcon build all packages
+# CRITICAL: Use bash -c with proper shell initialization to inherit ROS2 environment
+RUN /bin/bash -c "source /opt/ros/humble/setup.bash && \
+    cd /unitree_ros2_ws && \
+    echo 'Building Unitree message packages...' && \
+    colcon build --packages-select unitree_api unitree_go unitree_hg --executor sequential"
+
+# CRITICAL: Verify colcon build succeeded before proceeding
+RUN if [ ! -f /unitree_ros2_ws/install/setup.bash ]; then \
+      echo "[ERROR] colcon build failed! install/setup.bash not found."; \
+      ls -la /unitree_ros2_ws/; \
+      ls -la /unitree_ros2_ws/build/ 2>/dev/null || echo "No build directory"; \
+      exit 1; \
+    fi && \
+    echo "[SUCCESS] Unitree workspace built successfully"
+
+# Verify Python packages were generated
+RUN /bin/bash -c "source /unitree_ros2_ws/install/setup.bash && \
+    python -c \"import unitree_hg.msg; print('[SUCCESS] unitree_hg.msg importable after build')\" && \
+    python -c \"import unitree_go.msg; print('[SUCCESS] unitree_go.msg importable after build')\" && \
+    python -c \"import unitree_api.msg; print('[SUCCESS] unitree_api.msg importable after build')\""
+
+# Add unitree workspace to bashrc
+RUN echo "source /unitree_ros2_ws/install/setup.bash" >> /root/.bashrc
+
+# Show what was built
+RUN echo "=== Unitree ROS2 Workspace ===" && \
+    ls -lah /unitree_ros2_ws/install/ && \
+    echo "" && \
+    echo "=== Python packages installed ===" && \
+    find /unitree_ros2_ws/install -name "unitree_*.egg-info" -type d
+
+######################################################################
+# Stage 4: Install Development Tools & Isaac Lab
 # - Git, vim, tmux, htop for development
 # - Clone and install Isaac Lab 2.2+
 # - Link Isaac Sim installation
 ######################################################################
 
-FROM ros2_layer AS isaac_lab_layer
+FROM unitree_msgs_layer AS isaac_lab_layer
 
 USER root
 
@@ -191,7 +255,7 @@ RUN echo "export ISAACLAB_PATH=${ISAACLAB_PATH}" >> ${HOME}/.bashrc && \
     echo "alias python=${ISAACLAB_PATH}/_isaac_sim/python.sh" >> ${HOME}/.bashrc
 
 ######################################################################
-# Stage 4: Install Colibri G1 Digital Twin Extension
+# Stage 5: Install Colibri G1 Digital Twin Extension
 # - Copy project source code
 # - Install extension in editable mode
 # - Install ROS2 Python packages
@@ -218,12 +282,12 @@ RUN bash -c "eval \"\$(${DOCKER_USER_HOME}/miniconda3/bin/conda shell.bash hook)
 
 # Note: ROS2 message packages (geometry_msgs, nav_msgs, etc.) are already installed
 # via APT in Stage 2 (ros-humble-desktop includes all standard message packages)
-# They should NOT be installed via pip as they are C++ libraries with Python bindings
+# Unitree messages (unitree_hg, unitree_go, unitree_api) are built in Stage 3
 
 ######################################################################
-# Stage 5: Final Configuration
+# Stage 6: Final Configuration
 # - Additional Python packages
-# - Environment variables
+# - Environment variables for Unitree + CycloneDDS
 # - Entrypoint setup
 ######################################################################
 
@@ -232,7 +296,7 @@ FROM colibri_extension AS final
 USER root
 
 # Install additional Python packages for visualization and utilities
-# Note: NumPy is already pinned to <2.0 in Stage 3 for Isaac Sim 4.5.0 compatibility
+# Note: NumPy is already pinned to <2.0 in Stage 4 for Isaac Sim 4.5.0 compatibility
 # NOTE: PIP_CONSTRAINT env var ensures NumPy stays <2.0 during installation
 RUN bash -c "eval \"\$(${DOCKER_USER_HOME}/miniconda3/bin/conda shell.bash hook)\" && \
     conda activate isaaclab && \
@@ -257,16 +321,27 @@ ENV ISAAC_SIM_PATH=/isaac-sim
 ENV ISAACLAB_PATH=/workspace/IsaacLab
 ENV ROS_DISTRO=humble
 ENV ROS_DOMAIN_ID=0
+
+# CRITICAL: Set CycloneDDS as RMW implementation (required for Unitree robots)
+# This matches the real robot's DDS configuration
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# Optional: CycloneDDS URI for network interface configuration
+# Use "lo" for local simulation, or specify actual interface (e.g., "eth0") for real robot
+# ENV CYCLONEDDS_URI='<CycloneDDS><Domain><General><Interfaces><NetworkInterface name="lo" priority="default" multicast="default" /></Interfaces></General></Domain></CycloneDDS>'
+
 ENV PYTHONUNBUFFERED=1
 ENV NVIDIA_DRIVER_CAPABILITIES=all
 
-# CRITICAL: Add Isaac Lab and extension to PYTHONPATH so conda Python can find them
-# This ensures the digital_twin_colibri_g1 module is importable
-ENV PYTHONPATH="${ISAACLAB_PATH}/source/isaaclab:${ISAACLAB_PATH}/source/isaaclab_tasks:${ISAACLAB_PATH}/source/isaaclab_assets:/workspace/uniandes_g1_colibri/digital_twin_colibri_g1/source:${PYTHONPATH}"
+# CRITICAL: Add Isaac Lab, extension, AND Unitree messages to PYTHONPATH
+# ROS2 setup.bash will extend PYTHONPATH with /unitree_ros2_ws/install/lib/python3.x/site-packages
+# But we add the base install directory here for compatibility with non-sourced Python calls
+# The order matters: Isaac Lab -> Colibri extension -> Unitree workspace
+ENV PYTHONPATH="/workspace/uniandes_g1_colibri/digital_twin_colibri_g1/source:${ISAACLAB_PATH}/source/isaaclab:${ISAACLAB_PATH}/source/isaaclab_tasks:${ISAACLAB_PATH}/source/isaaclab_assets:/unitree_ros2_ws/install:${PYTHONPATH}"
 
-# Source ROS2 in bashrc
+# Source ROS2 and Unitree workspace in bashrc
 RUN echo "source /opt/ros/humble/setup.bash" >> ${HOME}/.bashrc && \
+    echo "source /unitree_ros2_ws/install/setup.bash" >> ${HOME}/.bashrc && \
     echo "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}" >> ${HOME}/.bashrc && \
     echo "export RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION}" >> ${HOME}/.bashrc
 
@@ -295,15 +370,17 @@ LABEL org.opencontainers.image.licenses="BSD-3-Clause"
 #   - Isaac Sim 4.5.0 (Ubuntu 22.04)
 #   - Isaac Lab 2.2+ in isolated conda environment (like isaac-go2-ros2)
 #   - ROS2 Humble Desktop + RViz2 (officially supported on Ubuntu 22.04)
-#   - CycloneDDS middleware
+#   - CycloneDDS middleware (rmw_cyclonedds_cpp)
+#   - Unitree ROS2 messages: unitree_api, unitree_go, unitree_hg
 #   - Colibri G1 Digital Twin extension
 #   - All dependencies for sim2sim deployment
 #
-# Key difference from previous builds:
-#   - Uses conda environment to isolate Isaac Lab from Isaac Sim's bundled packages
-#   - Prevents NumPy/SciPy version conflicts
+# Unitree Topics Supported:
+#   - /lowstate (unitree_hg/LowState) - 35 motor states + IMU
+#   - /lowcmd (unitree_hg/LowCmd) - 35 motor commands
+#   - /utlidar/cloud (PointCloud2) - LiDAR point cloud
 #
-# Total stages: 5
+# Total stages: 6
 # Base size: ~20-25GB (Isaac Sim base)
-# Additional: ~5-8GB (ROS2 + Isaac Lab + Miniconda + extensions)
+# Additional: ~6-10GB (ROS2 + Isaac Lab + Miniconda + Unitree + extensions)
 ######################################################################

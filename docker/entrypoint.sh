@@ -8,6 +8,11 @@ set -e
 echo "[INFO] Sourcing ROS2 Humble..."
 source /opt/ros/humble/setup.bash
 
+# CRITICAL: Source Unitree ROS2 workspace (must be BEFORE conda activation)
+# This makes unitree_hg, unitree_go, unitree_api available to Python
+echo "[INFO] Sourcing Unitree ROS2 workspace..."
+source /unitree_ros2_ws/install/setup.bash
+
 # Source Conda environment (following isaac-go2-ros2 pattern)
 echo "[INFO] Activating conda environment 'isaaclab'..."
 eval "$(/root/miniconda3/bin/conda shell.bash hook)"
@@ -19,9 +24,13 @@ export ISAAC_SIM_PATH=${ISAAC_SIM_PATH:-/isaac-sim}
 export ISAACLAB_PATH=${ISAACLAB_PATH:-/workspace/IsaacLab}
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ISAAC_SIM_PATH/exts/omni.isaac.ml_archive/pip_prebundle
 
+# CRITICAL: Set RMW implementation for Unitree robots (uses CycloneDDS)
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
 # Print environment info
 echo "[INFO] Environment configured:"
 echo "[INFO]   ROS_DOMAIN_ID: $ROS_DOMAIN_ID"
+echo "[INFO]   RMW_IMPLEMENTATION: $RMW_IMPLEMENTATION"
 echo "[INFO]   ISAAC_SIM_PATH: $ISAAC_SIM_PATH"
 echo "[INFO]   ISAACLAB_PATH: $ISAACLAB_PATH"
 echo "[INFO]   DISPLAY: $DISPLAY"
@@ -29,6 +38,12 @@ echo ""
 
 # Verify conda environment is active
 echo "[INFO] Python location: $(which python)"
+
+# CRITICAL: Verify unitree_hg module is importable
+echo "[INFO] Checking Unitree message packages..."
+python -c "from unitree_hg.msg import LowState, LowCmd; print('[SUCCESS] Unitree messages (unitree_hg) imported successfully')" || echo "[ERROR] Failed to import unitree_hg - workspace not properly sourced!"
+
+# Verify extension installation
 echo "[INFO] Checking digital_twin_colibri_g1 installation..."
 python -c "import digital_twin_colibri_g1; print('[SUCCESS] Extension found at:', digital_twin_colibri_g1.__file__)" || echo "[WARNING] Extension not found in Python path"
 echo ""
