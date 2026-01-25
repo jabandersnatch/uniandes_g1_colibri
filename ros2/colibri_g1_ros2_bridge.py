@@ -14,10 +14,10 @@ Topics Published (Unitree Pattern):
     /clock (rosgraph_msgs/Clock): Simulation time (via OmniGraph)
 
 Topics Published (Custom - Navigation):
-    /colibri_g1/goal_marker (visualization_msgs/Marker): Goal visualization @ 1 Hz
-    /colibri_g1/navigation/goal_pose (geometry_msgs/PoseStamped): Goal position
-    /colibri_g1/navigation/distance_to_goal (std_msgs/Float32): Distance metric
-    /colibri_g1/navigation/status (std_msgs/String): Navigation status
+    /{namespace}/goal_marker (visualization_msgs/Marker): Goal visualization @ 1 Hz
+    /{namespace}/navigation/goal_pose (geometry_msgs/PoseStamped): Goal position
+    /{namespace}/navigation/distance_to_goal (std_msgs/Float32): Distance metric
+    /{namespace}/navigation/status (std_msgs/String): Navigation status
 
 Topics Subscribed:
     /lowcmd (unitree_hg/LowCmd): Motor-level commands (primary)
@@ -170,7 +170,7 @@ class ColibriG1RobotDataManager(Node):
         # Primary: Unitree LowState (motor + IMU)
         self.lowstate_pub = self.create_publisher(LowState, "/lowstate", 10)
 
-        # LiDAR (matches Go2 naming: /utlidar/cloud)
+        # LiDAR point cloud publisher (Unitree naming convention)
         if self.lidar_annotators is not None:
             self.lidar_pub = self.create_publisher(PointCloud2, "/utlidar/cloud", 10)
             self.get_logger().info("LiDAR publisher created: /utlidar/cloud")
@@ -196,7 +196,7 @@ class ColibriG1RobotDataManager(Node):
         self.get_logger().info("Subscribers initialized (lowcmd, cmd_vel)")
 
     def _publish_static_transforms(self):
-        """Publish static transforms for sensors."""
+        """Publish static transforms for sensors (lidar_link, camera, etc.)."""
         if self.lidar_annotators is not None and self.cfg:
             lidar_broadcaster = StaticTransformBroadcaster(self)
             lidar_transform = TransformStamped()
@@ -401,7 +401,7 @@ class ColibriG1RobotDataManager(Node):
         return dt >= (1.0 / self.lidar_freq)
 
     def _publish_lidar(self):
-        """Publish /utlidar/cloud point cloud."""
+        """Publish /utlidar/cloud point cloud (Unitree naming convention)."""
         self.last_lidar_pub_time = time.time()
 
         try:

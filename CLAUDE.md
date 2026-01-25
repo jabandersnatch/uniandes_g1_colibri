@@ -4,679 +4,213 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Digital Twin for the Colibri G1 humanoid robot** built on top of Isaac Lab. The project uses the Unitree G1 humanoid robot to learn velocity tracking behaviors in a custom USD environment representing the Colibri digital twin environment.
+**Digital Twin for Colibri G1 humanoid robot** - Isaac Lab extension for velocity-based locomotion and social navigation.
 
-**Framework**: Isaac Lab extension built on Isaac Sim (NVIDIA Omniverse)
-**RL Libraries**: RSL-RL and SKRL for reinforcement learning
-**Robot**: Unitree G1 humanoid robot
-**Task**: Velocity-based locomotion in custom USD environment
+- **Framework**: Isaac Lab extension (Isaac Sim 4.5/5.0)
+- **RL Libraries**: RSL-RL, SKRL
+- **Robot**: Unitree G1 (29 DOF)
+- **Current Branch**: `feature/sim2sim-ros2` (ROS2 Humble integration)
 
-## Installation & Setup
+## Installation
 
-### Initial Installation
-
-1. Install Isaac Lab first (see [Isaac Lab installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html))
-   - Recommended: conda or uv installation for easier Python script execution
-
-2. Install this extension in editable mode:
-   ```bash
-   # From the repository root
-   # If Isaac Lab is in Python venv/conda:
-   python -m pip install -e source/digital_twin_colibri_g1
-
-   # If Isaac Lab is NOT in venv/conda:
-   # PATH_TO_isaaclab.sh -p -m pip install -e source/digital_twin_colibri_g1
-   ```
-
-### Verification
-
-List available environments:
 ```bash
-python scripts/list_envs.py
+# Install extension (requires Isaac Lab activated)
+python -m pip install -e source/digital_twin_colibri_g1
+
+# Verify tasks registered
+python scripts/list_envs.py  # Should show Isaac-Colibri-G1-*
 ```
 
-This should show environments with names containing `Isaac-Colibri-G1`.
+## Available Tasks
+
+| Task ID | Purpose | num_envs |
+|---------|---------|----------|
+| `Isaac-Colibri-G1-v0` | Base locomotion training | 512 |
+| `Isaac-Colibri-G1-Play-v0` | Visualization/evaluation | 10 |
+| `Isaac-Colibri-G1-SocialNav-v0` | LiDAR + cylinder obstacles | 128 |
+| `Isaac-Colibri-G1-SocialNav-Play-v0` | Social nav visualization | 4 |
+
+**Note**: People-based tasks (`Isaac-Colibri-G1-People-*`) are deprecated - IRA doesn't work with IsaacLab.
+
+## Common Commands
+
+```bash
+# Training (RSL-RL)
+python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-v0 --num_envs 512 --headless
+
+# Training (SKRL)
+python scripts/skrl/train.py --task=Isaac-Colibri-G1-v0
+
+# Play/evaluation
+python scripts/rsl_rl/play.py --task=Isaac-Colibri-G1-Play-v0 --num_envs 10
+
+# Resume training
+python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-v0 --resume --load_run <run_folder>
+
+# Social navigation
+python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-SocialNav-v0 --num_envs 128 --headless
+
+# Test environment setup
+python scripts/zero_agent.py --task=Isaac-Colibri-G1-v0
+python scripts/random_agent.py --task=Isaac-Colibri-G1-v0
+```
+
+**Key Training Options**:
+- `--headless`: No GUI (faster training)
+- `--video`: Record training videos
+- `--logger wandb|tensorboard`: Enable logging
+- `--distributed`: Multi-GPU training
+
+## Architecture
+
+### Key Files
+
+**Environment Configuration** (Isaac Lab extension pattern):
+```
+source/digital_twin_colibri_g1/digital_twin_colibri_g1/tasks/manager_based/digital_twin_colibri_g1/
+├── __init__.py                         # Gym task registration
+├── digital_twin_colibri_g1_env_cfg.py  # Base env (inherits G1FlatEnvCfg)
+├── social_nav_env_cfg.py               # LiDAR + cylinder obstacles
+├── agents/rsl_rl_ppo_cfg.py            # PPO hyperparameters
+└── mdp/
+    ├── __init__.py                     # Imports isaaclab.envs.mdp.*
+    ├── rewards.py                      # Custom rewards
+    ├── observations.py                 # Custom observations
+    ├── commands.py                     # Goal commands
+    └── events.py                       # Cylinder movement
+```
+
+**ROS2 / Sim2Sim** (Unitree G1 real robot patterns):
+```
+ros2/colibri_g1_ros2_bridge.py    # Single-node ROS2 (publishers + subscribers)
+ros2/colibri_g1_ros2_utils.py     # torch ↔ ROS2 conversions
+sim2sim/isaac_colibri_g1_ros2.py  # Main sim2sim entry point
+cfg/ros2_sim.yaml                 # Hydra configuration
+```
+
+### Environment Inheritance
+
+```
+G1FlatEnvCfg (isaaclab_tasks)
+    └── DigitalTwinColibriG1EnvCfg
+            ├── DigitalTwinColibriG1EnvCfg_PLAY
+            └── DigitalTwinColibriG1SocialNavEnvCfg (adds LiDAR + cylinders)
+                    └── DigitalTwinColibriG1SocialNavEnvCfg_PLAY
+```
+
+### MDP Components
+
+Custom MDP functions in `mdp/`:
+- **Rewards**: `goal_distance_exp`, `heading_alignment_reward`, `backwards_velocity_penalty`, `lidar_obstacle_proximity`, `smooth_trajectory_reward`
+- **Observations**: `goal_position_observation` (goal in base frame)
+- **Commands**: `SimpleGoalCommand` (autonomous goal generation), `GoalDirectedVelocityCommand`
+- **Events**: `update_cylinder_obstacles` (moves cylinders via random waypoints)
+
+### Training Logs
+
+```
+logs/rsl_rl/<experiment>/<timestamp>/
+├── params/{env,agent}.yaml    # Config snapshots
+├── model_<iter>.pt            # Checkpoints
+└── videos/                    # If --video enabled
+```
+
+## Sim2Sim ROS2 Integration
+
+### Unitree G1 Topic Pattern
+
+Uses real robot topic patterns for sim2real compatibility:
+
+| Topic | Type | Rate | Purpose |
+|-------|------|------|---------|
+| `/lowstate` | `unitree_hg/LowState` | 50 Hz | Motor + IMU state |
+| `/lowcmd` | `unitree_hg/LowCmd` | - | Motor commands (subscribed) |
+| `/utlidar/cloud` | `PointCloud2` | 15 Hz | LiDAR point cloud |
+| `/front_cam/color_image` | `Image` | 50 Hz | RGB camera |
+| `/front_cam/depth_image` | `Image` | 50 Hz | Depth camera |
+| `/cmd_vel` | `Twist` | - | Velocity commands (subscribed) |
+
+### Running Sim2Sim
+
+```bash
+# Native (requires ROS2 Humble)
+source /opt/ros/humble/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+python sim2sim/isaac_colibri_g1_ros2.py
+
+# Docker
+docker-compose -f docker/docker-compose.yaml up isaac_sim_ros2
+```
+
+### Configuration (`cfg/ros2_sim.yaml`)
+
+Key settings:
+- `policy.checkpoint`: Path to trained model (must match observation dim)
+- `ros2.use_unitree_topics`: Enable `/lowstate`, `/lowcmd` pattern
+- `sensor.enable_lidar/camera`: Toggle sensors
+- `performance.headless`: Run without GUI
+
+## Social Navigation
+
+### Cylinder Obstacles
+
+The SocialNav task spawns moving cylinders as dynamic obstacles:
+
+```python
+# social_nav_env_cfg.py
+obstacles: ObstacleManagerCfg = ObstacleManagerCfg()
+    num_cylinders: int = 3          # Per environment
+    cylinder_radius: float = 0.3    # Human body width
+    cylinder_height: float = 1.8    # Human height
+    move_speed_min: float = 0.3     # m/s
+```
+
+Cylinders use **dynamic rigid bodies** (not kinematic) due to Isaac Sim visual update bug with kinematic bodies.
+
+### LiDAR-based Rewards
+
+```python
+# Obstacle avoidance rewards
+self.rewards.obstacle_proximity_warning = RewTerm(
+    func=mdp.lidar_obstacle_proximity,
+    weight=-0.5,
+    params={"threshold": 1.5, "std": 0.5},
+)
+self.rewards.obstacle_proximity_critical = RewTerm(
+    func=mdp.lidar_obstacle_proximity,
+    weight=-2.0,
+    params={"threshold": 0.8, "std": 0.3},
+)
+```
+
+## Important Notes
+
+### Observation Dimension Mismatch
+
+Policies are sensitive to observation dimensions. Current checkpoint expects 125 obs (with goal_position). If you see dimension errors, check:
+- `cfg/ros2_sim.yaml` → `policy.checkpoint` path
+- Environment observation config matches checkpoint training config
+
+### Kinematic vs Dynamic Bodies
+
+Isaac Sim 4.5/5.0 has a bug where kinematic bodies don't update visually. Cylinders use dynamic bodies with high damping instead:
+```python
+rigid_props=RigidBodyPropertiesCfg(
+    kinematic_enabled=False,  # Must be False for visual updates
+    disable_gravity=True,
+    linear_damping=15.0,
+)
+```
 
 ### Code Formatting
 
-Install and run pre-commit for automatic code formatting:
 ```bash
 pip install pre-commit
 pre-commit run --all-files
 ```
 
-## Common Commands
-
-### Training
-
-Train with RSL-RL (default):
-```bash
-python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-v0
-```
-
-Train with SKRL:
-```bash
-python scripts/skrl/train.py --task=Isaac-Colibri-G1-v0
-```
-
-### Training Options
-
-- `--num_envs <N>`: Number of parallel environments (default: 512 for training)
-- `--seed <N>`: Random seed for reproducibility
-- `--max_iterations <N>`: Maximum training iterations
-- `--video`: Record videos during training
-- `--video_length <N>`: Video length in steps (default: 200)
-- `--video_interval <N>`: Record video every N steps (default: 2000)
-- `--distributed`: Multi-GPU training
-- `--headless`: Run without GUI (faster)
-- `--device <cuda:0|cpu>`: Device for simulation
-
-### Play/Evaluation
-
-Play trained policy:
-```bash
-python scripts/rsl_rl/play.py --task=Isaac-Colibri-G1-Play-v0
-```
-
-Options:
-- `--checkpoint <path>`: Path to checkpoint file
-- `--use_pretrained_checkpoint`: Use published pre-trained checkpoint (if available)
-- `--video`: Record video during playback
-- `--num_envs <N>`: Number of environments to visualize (default: 10 for play mode)
-- `--real-time`: Run at real-time speed
-
-### Testing with Dummy Agents
-
-Zero-action agent (robot does nothing):
-```bash
-python scripts/zero_agent.py --task=Isaac-Colibri-G1-v0
-```
-
-Random-action agent:
-```bash
-python scripts/random_agent.py --task=Isaac-Colibri-G1-v0
-```
-
-These are useful for verifying environment configuration.
-
-## Architecture
-
-### Package Structure
-
-```
-digital_twin_colibri_g1/
-├── source/digital_twin_colibri_g1/
-│   └── digital_twin_colibri_g1/
-│       ├── tasks/
-│       │   └── manager_based/
-│       │       └── digital_twin_colibri_g1/
-│       │           ├── __init__.py                    # Gym environment registration
-│       │           ├── digital_twin_colibri_g1_env_cfg.py  # Base environment config
-│       │           ├── people_env_cfg.py              # People environment config
-│       │           ├── social_nav_env_cfg.py          # Social navigation config
-│       │           ├── agents/
-│       │           │   ├── rsl_rl_ppo_cfg.py         # RSL-RL PPO configurations
-│       │           │   └── skrl_ppo_cfg.yaml         # SKRL PPO configuration
-│       │           └── mdp/
-│       │               ├── __init__.py
-│       │               └── rewards.py                # Custom reward functions
-│       └── ui_extension_example.py                   # Omniverse UI extension (optional)
-├── sensors/
-│   ├── __init__.py
-│   └── colibri_g1_sensors.py      # RTX LiDAR sensor manager
-├── people/
-│   ├── __init__.py
-│   └── people_spawner.py          # Animated character spawner
-├── ros2/
-│   ├── colibri_g1_ros2_bridge.py  # ROS2 bridge with publishers
-│   └── colibri_g1_ros2_utils.py   # Conversion utilities
-├── sim2sim/
-│   └── isaac_colibri_g1_ros2.py   # Sim2sim entry point
-├── cfg/
-│   ├── ros2_sim.yaml              # Sim2sim configuration
-│   └── people_commands.txt        # Character behavior commands
-└── scripts/rsl_rl/
-    ├── train.py                   # Training script
-    ├── play.py                    # Play script
-    └── play_people.py             # Play with people script
-```
-
-### Key Components
-
-1. **Environment Configuration** (`digital_twin_colibri_g1_env_cfg.py`):
-   - `DigitalTwinColibriG1EnvCfg`: Training configuration
-     - Inherits from `G1FlatEnvCfg` (Isaac Lab's G1 base configuration)
-     - Loads custom USD environment from `assets/colivriLab/colivrilabv0.usd`
-     - Configures 512 parallel environments with 10m spacing
-     - Episode length: 20 seconds
-     - Velocity commands: forward (0-1 m/s), lateral (-0.5 to 0.5 m/s), rotation (-1 to 1 rad/s)
-   - `DigitalTwinColibriG1EnvCfg_PLAY`: Evaluation configuration
-     - 10 environments for visualization
-     - Disables randomization and noise
-     - Longer episodes (30 seconds)
-
-2. **Environment Registration** (`__init__.py`):
-   - `Isaac-Colibri-G1-v0`: Training task
-   - `Isaac-Colibri-G1-Play-v0`: Evaluation task
-   - Both use G1's proven PPO configuration from `isaaclab_tasks` as default agent config
-
-3. **MDP Functions** (`mdp/`):
-   - Imports all standard Isaac Lab MDP functions
-   - Custom reward functions can be added in `rewards.py`
-   - Used by environment config to define task-specific rewards, observations, actions
-
-4. **Agent Configurations**:
-   - RSL-RL: `ColibriG1PPORunnerCfg` inherits from `G1FlatPPORunnerCfg`
-   - SKRL: YAML-based configuration
-   - Both can be customized with hyperparameters specific to Colibri task
-
-### Training Pipeline
-
-1. **Script entry** (`scripts/rsl_rl/train.py` or `scripts/skrl/train.py`)
-2. **Hydra configuration loading** via `@hydra_task_config` decorator
-   - Loads environment config and agent config
-   - Supports config overrides via CLI
-3. **Environment creation** via `gym.make(task_name, cfg=env_cfg)`
-4. **Environment wrapping** with RL library-specific wrapper
-5. **Runner creation** (OnPolicyRunner or DistillationRunner for RSL-RL)
-6. **Training loop** with logging to `logs/rsl_rl/<experiment_name>/<timestamp>/`
-
-### Logs Structure
-
-```
-logs/
-└── rsl_rl/
-    └── <experiment_name>/
-        └── <timestamp>/
-            ├── params/
-            │   ├── env.yaml      # Environment configuration
-            │   ├── agent.yaml    # Agent configuration
-            │   ├── env.pkl
-            │   └── agent.pkl
-            ├── model_<iter>.pt   # Checkpoint files
-            └── videos/           # Training videos (if --video enabled)
-```
-
-## Customization Guide
-
-### Modifying the Environment
-
-**Change USD environment**:
-- Replace `assets/colivriLab/colivrilabv0.usd` or update path in `digital_twin_colibri_g1_env_cfg.py:63`
-
-**Adjust velocity ranges**:
-- Modify `self.commands.base_velocity.ranges` in `digital_twin_colibri_g1_env_cfg.py:95-97`
-
-**Change number of parallel environments**:
-- Edit `self.scene.num_envs` in `digital_twin_colibri_g1_env_cfg.py:81`
-- Or use `--num_envs` CLI argument
-
-**Add custom rewards**:
-- Define reward function in `mdp/rewards.py`
-- Add to `self.rewards` in environment config using `RewTerm`
-
-**Modify observations**:
-- Override observation groups in environment config
-- G1 base config includes: base velocities, projected gravity, joint states, velocity commands, actions
-
-### Modifying Training
-
-**Change hyperparameters** (RSL-RL):
-- Override in `agents/rsl_rl_ppo_cfg.py:29-53`
-- Examples: learning rate, network architecture, training iterations, save interval
-
-**Change experiment name**:
-- Use `--experiment_name` CLI argument
-- Or modify `self.experiment_name` in agent config
-
-**Enable logging**:
-- Use `--logger wandb` or `--logger tensorboard`
-- Use `--log_project_name <name>` for wandb/neptune
-
-### Resume Training
-
-```bash
-python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-v0 --resume --load_run <run_folder>
-```
-
-## Important Notes
-
-### Isaac Lab Version Compatibility
-
-- Requires Isaac Sim 4.5.0 or 5.0.0
-- Python 3.10 or 3.11
-- RSL-RL minimum version: 3.0.1
-- Training scripts automatically check for correct RSL-RL version
-
-### Python Path Issues
-
-If Pylance can't find modules:
-1. Run VSCode task `setup_python_env` (Ctrl+Shift+P → Tasks: Run Task)
-2. Add extension path to `.vscode/settings.json`:
-   ```json
-   {
-     "python.analysis.extraPaths": [
-       "<path-to-repo>/source/digital_twin_colibri_g1"
-     ]
-   }
-   ```
-
-### Performance Tuning
-
-- **GPU memory limited**: Reduce `num_envs` (512 → 256 or lower)
-- **Complex USD scene**: Further reduce `num_envs` or increase `env_spacing`
-- **Faster training**: Use `--headless` mode, disable video recording
-- **Multi-GPU**: Use `--distributed` flag
-
-### Entry Points
-
-When working with tasks, remember that the registration system uses:
-- `env_cfg_entry_point`: Points to environment config class
-- `rsl_rl_cfg_entry_point`: Points to agent config class
-- Task names must match the pattern in `scripts/list_envs.py` (`"Isaac-Colibri-G1"`) to be listed
-
-The environment inherits from Isaac Lab's proven G1 locomotion configuration, so most locomotion behaviors are already well-tuned. Focus customizations on:
-1. Environment-specific rewards
-2. Velocity command ranges appropriate for the Colibri environment
-3. Obstacle avoidance (if needed)
-4. Domain-specific observations
-
----
-
-## Phase 6: Sim2Sim ROS2 Integration (Docker Deployment)
-
-### Overview
-
-Phase 6 adds ROS2 integration for sim-to-sim transfer, enabling the trained G1 policy to run in a containerized environment with ROS2 communication.
-
-**Status**: Implementation complete, Docker build ready after system reboot
-
-**Branch**: `feature/sim2sim-ros2`
-
-### Docker Deployment
-
-The project includes a complete Docker setup with:
-- **Isaac Sim 4.5.0** (Ubuntu 22.04 - official ROS2 Humble support)
-- **Isaac Lab 2.2+** (latest compatible version)
-- **ROS2 Humble** (LTS until 2027, officially supported on Ubuntu 22.04)
-- **CycloneDDS** (high-performance middleware)
-- **Trained policy integration** (RSL-RL checkpoint loading)
-
-### Quick Start (Docker)
-
-```bash
-# Build Docker image (30-60 min first time)
-docker-compose -f docker/docker-compose.yaml build
-
-# Run sim2sim with ROS2 bridge
-docker-compose -f docker/docker-compose.yaml up isaac_sim_ros2
-
-# In another terminal, check ROS2 topics
-docker exec -it colibri_g1_sim2sim bash -c "source /opt/ros/humble/setup.bash && ros2 topic list"
-
-# Launch RViz2 for visualization
-docker-compose -f docker/docker-compose.yaml run --rm rviz2
-```
-
-### ROS2 Topics Published
-
-The sim2sim bridge publishes:
-
-| Topic | Type | Rate | Description |
-|-------|------|------|-------------|
-| `/colibri_g1/odom` | `nav_msgs/Odometry` | 50 Hz | Full odometry (pose + twist) |
-| `/colibri_g1/joint_states` | `sensor_msgs/JointState` | 50 Hz | 29-DOF joint positions/velocities |
-| `/colibri_g1/pose` | `geometry_msgs/PoseStamped` | 10 Hz | Simplified pose only |
-| `/tf` | `tf2_msgs/TFMessage` | 50 Hz | Transform: map → base_link → lidar_link |
-| `/colibri_g1/goal_marker` | `visualization_msgs/Marker` | 10 Hz | Goal visualization (color-coded) |
-| `/colibri_g1/navigation_metrics` | Custom | 10 Hz | Distance to goal, status |
-| `/colibri_g1/lidar/point_cloud` | `sensor_msgs/PointCloud2` | 15 Hz | RTX LiDAR point cloud |
-| `/clock` | `rosgraph_msgs/Clock` | Sim rate | Simulation time |
-
-### ROS2 Architecture (Unified Single-Node Pattern)
-
-**Design**: Phase 6 uses a **unified single-node ROS2 architecture** (not multiple separate nodes):
-
-- **Single Node**: `ColibriG1RobotDataManager(Node)` - Combines all publishers and subscribers
-- **Advantages**: Simpler code, no threading complexity, easier debugging
-- **Callbacks**: Handled via `rclpy.spin_once()` in main loop (non-blocking)
-- **Backward Compatible**: Aliases `RobotDataManager` and `G1PubNode`/`G1SubNode` point to the unified node
-
-This matches the proven pattern from `isaac-go2-ros2` and avoids threading issues while maintaining full functionality.
-
-### Key Files
-
-**ROS2 Bridge**:
-- `ros2/colibri_g1_ros2_bridge.py` - Unified ROS2 node (publishers + subscribers in single class)
-- `ros2/colibri_g1_ros2_utils.py` - Conversion utilities (torch ↔ ROS2)
-
-**Sim2Sim Entry Point**:
-- `sim2sim/isaac_colibri_g1_ros2.py` - Main script with policy loading
-- `cfg/ros2_sim.yaml` - Hydra configuration
-
-**Sensors**:
-- `sensors/colibri_g1_sensors.py` - RTX LiDAR sensor manager
-- `sensors/__init__.py` - Sensor module exports
-
-**People (Animated Characters)**:
-- `people/people_spawner.py` - Animated character spawner using omni.anim.people
-- `people/__init__.py` - People module exports
-- `cfg/people_commands.txt` - Character behavior command sequences
-
-**Environment Configurations**:
-- `source/.../people_env_cfg.py` - People environment config
-- `source/.../social_nav_env_cfg.py` - Social navigation environment config
-
-**Docker**:
-- `docker/Dockerfile` - Multi-stage build (5 stages)
-- `docker/docker-compose.yaml` - Service orchestration
-- `docker/entrypoint.sh` - Container initialization
-- `docker/launch.sh` - Helper script (build, run, enter, etc.)
-
-**Documentation**:
-- `README_ROS2.md` - ROS2 integration guide
-- `docs/SIM2SIM_ROS2.md` - Architecture and design
-- `docs/DEPENDENCIES.md` - Dependency management (pip + apt)
-- `docs/PEOPLE_CONTROLLER.md` - Animated people documentation
-- `docs/IMPLEMENTATION_PLAN.md` - LiDAR, People, Social Nav implementation plan
-- `docker/NETWORK_TROUBLESHOOTING.md` - Docker networking issues
-- `NEXT_STEPS.md` - Post-implementation testing guide
-
-### Docker Troubleshooting
-
-**Common Issues**:
-
-1. **Network bridge error during build**:
-   - Cause: Kernel/module mismatch (veth module unavailable)
-   - Solution: Reboot system to load updated kernel
-   - See: `docker/NETWORK_TROUBLESHOOTING.md`
-
-2. **GPU not detected**:
-   ```bash
-   # Install nvidia-container-toolkit
-   # https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
-   ```
-
-3. **X11 permission denied**:
-   ```bash
-   xhost +local:docker
-   ```
-
-4. **ROS2 topics not visible**:
-   - Check `ROS_DOMAIN_ID=0` matches between containers
-   - Verify `network_mode: host` in docker-compose.yaml
-
-### Dependency Management
-
-Isaac Lab uses its own dependency system (NOT `uv` or `requirements.txt`):
-
-**Python packages** → `source/digital_twin_colibri_g1/setup.py`:
-```python
-INSTALL_REQUIRES = [
-    "psutil",
-    "rclpy",  # ROS2 Python client
-]
-```
-
-**Extension packages** → `source/digital_twin_colibri_g1/config/extension.toml`:
-```toml
-[python.pipapi]
-requirements = ["hydra-core"]
-```
-
-**ROS2 message packages** → Installed via APT (NOT pip):
-```bash
-# In Dockerfile Stage 2
-apt-get install ros-humble-desktop  # Includes all standard messages
-```
-
-See `docs/DEPENDENCIES.md` for complete guide.
-
-### Native Installation (Alternative to Docker)
-
-If you prefer running natively without Docker:
-
-```bash
-# Prerequisites
-sudo apt install ros-humble-desktop ros-humble-rmw-cyclonedds-cpp
-
-# Install extension
-pip install -e source/digital_twin_colibri_g1
-
-# Run sim2sim
-source /opt/ros/humble/setup.bash
-export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-python sim2sim/isaac_colibri_g1_ros2.py
-```
-
-### Policy Checkpoint
-
-The sim2sim script loads a trained RSL-RL policy:
-
-**Default checkpoint**: `logs/rsl_rl/g1_flat/2025-11-09_16-20-14/model_550.pt`
-
-**To use a different checkpoint**, edit `cfg/ros2_sim.yaml`:
-```yaml
-policy:
-  checkpoint: "path/to/your/model.pt"
-  device: "cuda"
-  deterministic: true
-```
-
-### Testing Workflow
-
-1. **Build Docker image** (see `NEXT_STEPS.md`)
-2. **Start sim2sim**: `docker-compose up isaac_sim_ros2`
-3. **Verify ROS2 topics**: `ros2 topic list`
-4. **Monitor navigation**: `ros2 topic echo /colibri_g1/navigation_metrics`
-5. **Visualize in RViz2**: `docker-compose run --rm rviz2`
-
-### Next Phase: Sim2Real
-
-After validating Phase 6, the next step is deploying to the physical Colibri G1 robot:
-- Adapt ROS2 topics to real robot interfaces
-- Add sensor feedback (IMU, cameras, force-torque)
-- Implement safety constraints and emergency stop
-- Real-world domain randomization validation
-
----
-
-## LiDAR Sensor Integration
-
-### Overview
-
-The sim2sim script includes RTX LiDAR support for environmental perception, publishing point cloud data via ROS2 for visualization and navigation.
-
-### Configuration
-
-**File**: `cfg/ros2_sim.yaml`
-
-```yaml
-sensor:
-  enable_lidar: true                    # Enable/disable LiDAR
-  lidar:
-    config: "Hesai_XT32_SD10"           # 32-channel LiDAR preset
-    parent_link: "head_link"            # Mount point on robot
-    translation: [0.0, 0.0, 0.1]        # Offset from parent link
-    orientation: [1.0, 0.0, 0.0, 0.0]   # Quaternion (w, x, y, z)
-    frame_id: "lidar_link"              # ROS2 TF frame
-    publish_rate: 15                    # Point cloud rate (Hz)
-```
-
-### ROS2 Topic
-
-- **Topic**: `/colibri_g1/lidar/point_cloud`
-- **Type**: `sensor_msgs/PointCloud2`
-- **Rate**: 15 Hz
-- **Frame**: `lidar_link`
-
-### TF Tree
-
-```
-map
- └── base_link
-      └── lidar_link (static transform from config)
-```
-
-### Testing LiDAR
-
-```bash
-# Check LiDAR topic exists
-ros2 topic list | grep lidar
-
-# Verify publish rate
-ros2 topic hz /colibri_g1/lidar/point_cloud
-# Expected: ~15 Hz
-
-# View point cloud data
-ros2 topic echo /colibri_g1/lidar/point_cloud --once
-
-# Visualize in RViz2
-rviz2
-# Add: PointCloud2, Topic: /colibri_g1/lidar/point_cloud
-# Set: Fixed Frame: map or lidar_link
-```
-
-### Key Files
-
-- `sensors/colibri_g1_sensors.py` - `SensorManager` class with `add_rtx_lidar()` method
-- `ros2/colibri_g1_ros2_bridge.py:462-512` - PointCloud2 publishing logic
-
----
-
-## Animated People (Training with Dynamic Obstacles)
-
-### Overview
-
-The project supports spawning animated human characters using Isaac Sim's `omni.anim.people` extension. Characters serve as dynamic obstacles for training social navigation policies.
-
-### Task Variants
-
-| Task ID | Purpose | num_envs | Characters |
-|---------|---------|----------|------------|
-| `Isaac-Colibri-G1-People-v0` | Training | 64 | 2 |
-| `Isaac-Colibri-G1-People-Play-v0` | Visualization | 4 | 2 |
-
-### Quick Start
-
-```bash
-# Play with animated people
-python scripts/rsl_rl/play_people.py --num_envs 2
-
-# Or use the registered task
-python scripts/rsl_rl/play.py --task=Isaac-Colibri-G1-People-Play-v0 --num_envs 2
-
-# Train with people as obstacles
-python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-People-v0 --num_envs 64 --headless
-```
-
-### Configuration
-
-**File**: `people_env_cfg.py`
-
-```python
-@configclass
-class PeopleManagerCfg:
-    num_characters: int = 2              # Characters per environment
-    command_file: str = "cfg/people_commands.txt"
-    spawn_area_min: tuple = (-3.0, -3.0) # Spawn area bounds
-    spawn_area_max: tuple = (3.0, 3.0)
-    spawn_height: float = 1.2            # Colibri floor height
-    navmesh_enabled: bool = False        # Use fixed waypoints
-    dynamic_avoidance: bool = True       # Characters avoid each other
-    loop_commands: bool = True           # Repeat command sequence
-```
-
-### Command File Format
-
-**File**: `cfg/people_commands.txt`
-
-```txt
-# Character behavior commands
-Character_0 GoTo 2.0 2.0 1.2 90      # Walk to position, face direction
-Character_0 Idle 3                   # Stand still for 3 seconds
-Character_0 LookAround 2             # Look left/right for 2 seconds
-Character_0 GoTo -2.0 2.0 1.2 180   # Continue patrol
-```
-
-### Available Commands
-
-| Command | Parameters | Description |
-|---------|------------|-------------|
-| `GoTo` | `x y z rotation` | Walk to position, face direction (degrees) |
-| `Idle` | `duration_seconds` | Stand still |
-| `LookAround` | `duration_seconds` | Look left and right |
-
-### Key Files
-
-- `people/people_spawner.py` - `PeopleSpawner` class
-- `cfg/people_commands.txt` - Character behavior sequences
-- `scripts/rsl_rl/play_people.py` - Play script with people
-- `docs/PEOPLE_CONTROLLER.md` - Detailed documentation
-
----
-
-## Social Navigation (LiDAR + People + Social Rewards)
-
-### Overview
-
-Combines LiDAR perception with animated people for human-aware navigation training. The robot learns to navigate to goals while maintaining appropriate distances from humans.
-
-### Task Variants
-
-| Task ID | Purpose | num_envs |
-|---------|---------|----------|
-| `Isaac-Colibri-G1-SocialNav-v0` | Training | 256 |
-| `Isaac-Colibri-G1-SocialNav-Play-v0` | Visualization | 4 |
-
-### Observation Space Extension
-
-- **`lidar_sectors`**: 16-dimensional tensor (minimum distance per 22.5° angular sector)
-
-### Social Navigation Rewards
-
-| Reward | Weight | Threshold | Description |
-|--------|--------|-----------|-------------|
-| `human_proximity` | -0.5 | 1.5m | Penalty for approaching humans |
-| `personal_space` | -2.0 | 0.8m | Strong penalty for space violation |
-| `smooth_trajectory` | +0.1 | - | Reward for non-jerky movements |
-
-### Quick Start
-
-```bash
-# Test social navigation task
-python scripts/rsl_rl/play.py --task=Isaac-Colibri-G1-SocialNav-Play-v0 --num_envs 2
-
-# Train social navigation policy
-python scripts/rsl_rl/train.py --task=Isaac-Colibri-G1-SocialNav-v0 \
-  --num_envs 256 --headless --max_iterations 3000
-```
-
-### PPO Configuration
-
-**Class**: `ColibriG1SocialNavPPORunnerCfg`
-
-- **Network**: `[512, 512, 256, 128]` (larger than base for LiDAR processing)
-- **Learning Rate**: 5e-4
-- **Max Iterations**: 3000
-- **Entropy Coefficient**: 0.01
-
-### Key Files
-
-- `source/.../social_nav_env_cfg.py` - Environment configuration
-- `source/.../mdp/rewards.py` - Social navigation reward functions
-- `source/.../agents/rsl_rl_ppo_cfg.py` - `ColibriG1SocialNavPPORunnerCfg`
-
-### Implementation Status
-
-| Component | Status |
-|-----------|--------|
-| Environment Config | Complete |
-| Task Registration | Complete |
-| Agent Config | Complete |
-| `lidar_sector_distances()` | Placeholder (returns dummy values) |
-| `human_proximity_penalty()` | Placeholder (returns dummy values) |
-| `personal_space_violation()` | Placeholder (returns dummy values) |
-| `smooth_trajectory_reward()` | Complete |
-
-**Note**: Placeholder functions work for testing infrastructure but return dummy values. Full implementation requires integrating LiDAR sensor data and character position tracking into the reward functions.
+### GPU Memory
+
+Reduce `num_envs` if OOM:
+- Base training: 512 → 256
+- SocialNav: 128 → 64 (LiDAR + cylinders need more memory)

@@ -190,112 +190,6 @@ def heading_alignment_reward(
 # ============================================
 
 
-def lidar_sector_distances(
-    env: ManagerBasedRLEnv,
-    num_sectors: int = 16,
-    max_range: float = 10.0,
-) -> torch.Tensor:
-    """
-    Process LiDAR point cloud into sector-based distance observations.
-
-    Divides the 360° field of view around the robot into angular sectors
-    and returns the minimum distance to an obstacle in each sector.
-    This provides a fixed-size observation regardless of LiDAR point count.
-
-    Note:
-        This function returns placeholder values until LiDAR data is
-        integrated into the environment. The actual implementation requires
-        accessing LiDAR point cloud data from the sensor manager.
-
-    Args:
-        env: The learning environment.
-        num_sectors: Number of angular sectors (default: 16 = 22.5° each).
-        max_range: Maximum detection range in meters.
-
-    Returns:
-        Tensor of shape (num_envs, num_sectors) with normalized distances [0, 1].
-        0.0 = obstacle at robot position, 1.0 = no obstacle within max_range.
-    """
-    num_envs = env.num_envs
-    device = env.device
-
-    # Placeholder implementation: return max range (no obstacles detected)
-    # TODO: Replace with actual LiDAR data processing when sensor is integrated
-    # The actual implementation would:
-    # 1. Get LiDAR point cloud from sensor manager
-    # 2. Convert points to polar coordinates (angle, distance)
-    # 3. Bin points by angle into sectors
-    # 4. Return minimum distance per sector
-    return torch.ones(num_envs, num_sectors, device=device)
-
-
-def human_proximity_penalty(
-    env: ManagerBasedRLEnv,
-    threshold: float = 1.5,
-) -> torch.Tensor:
-    """
-    Penalize robot for being within threshold distance of any human.
-
-    This reward encourages the robot to maintain social distance from
-    animated human characters in the environment.
-
-    Note:
-        This function returns placeholder values until human position
-        tracking is integrated. The actual implementation requires
-        accessing character positions from the people spawner.
-
-    Args:
-        env: The learning environment.
-        threshold: Distance threshold in meters (default: 1.5m social distance).
-
-    Returns:
-        Penalty value per environment. Returns 1.0 when within threshold
-        (to be multiplied by negative weight), 0.0 otherwise.
-    """
-    num_envs = env.num_envs
-    device = env.device
-
-    # Placeholder implementation: return no penalty
-    # TODO: Replace with actual human position tracking when integrated
-    # The actual implementation would:
-    # 1. Get human positions from people spawner
-    # 2. Get robot position from robot data
-    # 3. Compute distance to each human
-    # 4. Return 1.0 if any human within threshold, 0.0 otherwise
-    return torch.zeros(num_envs, device=device)
-
-
-def personal_space_violation(
-    env: ManagerBasedRLEnv,
-    threshold: float = 0.8,
-) -> torch.Tensor:
-    """
-    Strong penalty for violating personal space (very close to humans).
-
-    This is a stronger penalty than human_proximity_penalty, designed to
-    create a hard boundary that the robot should rarely or never cross.
-
-    Note:
-        This function returns placeholder values until human position
-        tracking is integrated.
-
-    Args:
-        env: The learning environment.
-        threshold: Personal space radius in meters (default: 0.8m).
-
-    Returns:
-        Penalty value per environment. Returns 1.0 when within personal space
-        (to be multiplied by strong negative weight), 0.0 otherwise.
-    """
-    num_envs = env.num_envs
-    device = env.device
-
-    # Placeholder implementation: return no penalty
-    # TODO: Replace with actual human position tracking when integrated
-    # Similar to human_proximity_penalty but with tighter threshold
-    return torch.zeros(num_envs, device=device)
-
-
 def smooth_trajectory_reward(
     env: ManagerBasedRLEnv,
 ) -> torch.Tensor:
@@ -329,3 +223,93 @@ def smooth_trajectory_reward(
     smoothness = torch.exp(-0.1 * action_diff)
 
     return smoothness
+
+
+def obstacle_proximity_penalty(
+    env: ManagerBasedRLEnv,
+    num_cylinders: int = 1,
+    threshold: float = 1.5,
+    std: float = 0.5,
+    cylinder_radius: float = 0.3,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize proximity to cylinder obstacles using exponential kernel.
+
+    Computes the minimum distance from robot to any cylinder obstacle and applies
+    an exponential penalty. This uses analytical distance computation from known
+    cylinder positions (more reliable than RayCaster for dynamic objects).
+
+    Formula: exp(-(distance / std)^2) when distance < threshold, else 0
+
+    Args:
+        env: The learning environment.
+        num_cylinders: Number of cylinder obstacles in scene.
+        threshold: Distance threshold in meters beyond which no penalty applies.
+        std: Standard deviation for exponential kernel. Smaller = sharper penalty.
+        cylinder_radius: Radius of cylinders for edge distance calculation.
+        asset_cfg: Robot asset configuration.
+
+    Returns:
+        Penalty value per environment (0 to 1).
+        0.0 = no obstacles within threshold, 1.0 = obstacle touching robot.
+
+    Example:
+        # Warning penalty (gentle gradient at 1.5m)
+        self.rewards.obstacle_proximity_warning = RewTerm(
+            func=mdp.obstacle_proximity_penalty,
+            weight=-0.5,
+            params={"threshold": 1.5, "std": 0.5, "num_cylinders": 3},
+        )
+
+        # Critical penalty (sharp gradient at 0.8m)
+        self.rewards.obstacle_proximity_critical = RewTerm(
+            func=mdp.obstacle_proximity_penalty,
+            weight=-2.0,
+            params={"threshold": 0.8, "std": 0.3, "num_cylinders": 3},
+        )
+    """
+    # Get robot position
+    robot = env.scene[asset_cfg.name]
+    robot_pos = robot.data.root_pos_w[:, :2]  # (num_envs, 2) - XY only
+
+    # Compute minimum distance to any cylinder
+    min_distance = torch.full(
+        (env.num_envs,),
+        float("inf"),
+        device=env.device,
+        dtype=torch.float32,
+    )
+
+    obstacles_found = 0
+    for i in range(num_cylinders):
+        obstacle_name = f"obstacle_{i}"
+        # Try both attribute access and dict-style access
+        try:
+            obstacle = env.scene[obstacle_name]
+            obstacle_pos = obstacle.data.root_pos_w[:, :2]
+            obstacles_found += 1
+
+            # Distance to cylinder edge (center distance minus radius)
+            dist = torch.norm(robot_pos - obstacle_pos, dim=-1) - cylinder_radius
+            dist = torch.clamp(dist, min=0.0)
+
+            # Track minimum
+            min_distance = torch.minimum(min_distance, dist)
+        except (KeyError, AttributeError):
+            # Obstacle not found in scene
+            pass
+
+    # Replace inf with threshold (no penalty for missing obstacles)
+    min_distance = torch.where(
+        torch.isinf(min_distance),
+        torch.full_like(min_distance, threshold),
+        min_distance,
+    )
+
+    # Compute exponential penalty
+    penalty = torch.exp(-torch.square(min_distance / std))
+
+    # Only apply within threshold
+    penalty = torch.where(min_distance < threshold, penalty, torch.zeros_like(penalty))
+
+    return penalty

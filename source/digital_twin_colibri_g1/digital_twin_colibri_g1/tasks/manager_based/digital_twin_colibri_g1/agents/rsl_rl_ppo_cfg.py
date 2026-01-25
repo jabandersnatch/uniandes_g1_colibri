@@ -63,13 +63,14 @@ class ColibriG1SocialNavPPORunnerCfg(G1FlatPPORunnerCfg):
     PPO runner configuration for Colibri G1 Social Navigation task.
 
     This configuration extends the base G1 PPO config for social navigation:
-    - Larger network to handle additional LiDAR observations
+    - Larger network to handle additional obstacle observations
     - Adjusted hyperparameters for the more complex task
-    - Extended training iterations for learning social behaviors
+    - Extended training iterations for learning avoidance behaviors
 
-    The social navigation task adds:
-    - 16 LiDAR sector observations (spatial awareness)
-    - Human proximity rewards (social distance)
+    The social navigation task adds (+11 observations):
+    - 8 hybrid sector distances (LiDAR + cylinder combined)
+    - 3 direct cylinder distances
+    - Obstacle proximity rewards (social distance)
     - Personal space penalties (safety)
     - Smooth trajectory rewards (comfort)
     """

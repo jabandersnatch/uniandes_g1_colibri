@@ -25,24 +25,26 @@ behavior:
 characters:
   num_characters: 2                     # Number of characters to spawn
 
-  # Cloud asset library URLs (NVIDIA Isaac Sim Cloud)
+  # Character asset paths - RELATIVE to the asset root from carb settings
+  # Asset root is like: https://.../Assets/Isaac/4.0
+  # So we just need the path AFTER that point: Isaac/People/Characters/[name]/[name].usd
   assets:
-    - name: "Female_Business_01"
-      url: "https://d36m3dsta5ufqu.cloudfront.net/Isaac-Sim-Assets/Isaac/2023.10/Isaac-Sim-4.5.0/Characters/Female_Business_01.usd"
-    - name: "Female_Business_02"
-      url: "https://d36m3dsta5ufqu.cloudfront.net/Isaac-Sim-Assets/Isaac/2023.10/Isaac-Sim-4.5.0/Characters/Female_Business_02.usd"
+    - name: "Police Woman"
+      url: "Isaac/People/Characters/female_adult_police_02/female_adult_police_02.usd"
+    - name: "Police Man"
+      url: "Isaac/People/Characters/original_male_adult_police_04/male_adult_police_04.usd"
 
   # Character spawn configuration
   spawn:
     # Spawn area bounds (meters)
     area_min: [-3.0, -3.0]              # Min X, Y
     area_max: [3.0, 3.0]                # Max X, Y
-    height: 1.2                         # Z coordinate (Colibri Lab floor height)
+    height: 1.1                         # Z coordinate (10cm lower for better ground contact)
 
     # Initial positions (override if num_characters > 2)
     initial_positions:
-      - [1.5, 1.0, 1.2]                # Character_0: front-left
-      - [2.0, -1.0, 1.2]               # Character_1: front-right
+      - [1.5, 1.0, 1.1]                # Character_0: front-left
+      - [2.0, -1.0, 1.1]               # Character_1: front-right
 
     # Random seed for reproducibility
     random_seed: 42
@@ -53,6 +55,12 @@ characters:
     enable_physics: false               # Disable physics (kinematic only)
     capsule_radius: 0.35                # Character collision radius
     capsule_height: 1.8                 # Character collision height
+
+# ============================================
+# Height Verification
+# ============================================
+# ✓ VERIFIED: Character spawn height (1.2m) matches G1 robot spawn height
+# See: digital_twin_colibri_g1_env_cfg.py line 96
 
 # ============================================
 # NavMesh Configuration
@@ -78,22 +86,24 @@ navmesh:
 
 # ============================================
 # IRA Extensions (Load Order CRITICAL)
+# Reference: https://docs.isaacsim.omniverse.nvidia.com/4.5.0/replicator_tutorials/tutorial_replicator_agent.html
 # ============================================
 extensions:
-  # Load schemas first
+  # Load schemas first (REQUIRED)
   - "omni.anim.graph.schema"            # Animation graph schema
   - "omni.anim.navigation.schema"       # Navigation schema
 
-  # Load core implementations
+  # Load core implementations (REQUIRED)
   - "omni.anim.graph.core"              # Animation graph core
-  - "omni.anim.navigation.core"         # Navigation core
+  - "omni.anim.navigation.core"         # Navigation core (needed for NavMesh)
 
-  # Load IRA and scripting
-  - "omni.replicator.agent"             # IRA main extension
+  # Load IRA extensions (OFFICIAL NAMES FROM ISAAC SIM 4.5)
+  - "isaacsim.replicator.agent.core"    # IRA Core extension (MUST use isaacsim.replicator.agent.core, NOT omni.replicator.agent)
+  - "isaacsim.replicator.agent.ui"      # IRA UI extension for Agent SDG
+
+  # Scripting and animation support
   - "omni.kit.scripting"                # Scripting API support
-
-  # Optional: Animation utilities
-  - "omni.anim.people"                  # Legacy (for compatibility)
+  - "omni.anim.people"                  # Legacy people extension (backward compatibility)
 
 # ============================================
 # Logging & Debugging

@@ -31,6 +31,19 @@ parser.add_argument(
     "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
 )
 parser.add_argument("--export_io_descriptors", action="store_true", default=False, help="Export IO descriptors.")
+parser.add_argument(
+    "--people_backend",
+    type=str,
+    default="legacy",
+    choices=["legacy", "ira"],
+    help="Backend for animated people: 'legacy' (omni.anim.people) or 'ira' (isaacsim.replicator.agent)",
+)
+parser.add_argument(
+    "--ira_config",
+    type=str,
+    default="cfg/ira_people_config.yaml",
+    help="Path to IRA config YAML file (if using IRA backend)",
+)
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -154,6 +167,69 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+
+    # ============================================
+    # ADD ANIMATED PEOPLE TO SCENE (if people task)
+    # ============================================
+    if "People" in args_cli.task:
+        print("\n[INFO] ========== PEOPLE SCENE INITIALIZATION ==========")
+        stage = omni.usd.get_context().get_stage()
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+        if args_cli.people_backend == "ira":
+            print(f"[INFO] Using IRA backend for animated people")
+            try:
+                import yaml
+                import sys
+                # Add people module to path
+                people_dir = os.path.join(project_root, "people")
+                if people_dir not in sys.path:
+                    sys.path.insert(0, people_dir)
+                from ira_people_manager import IRACharacterManager
+
+                ira_config_path = os.path.join(project_root, args_cli.ira_config)
+                if os.path.exists(ira_config_path):
+                    with open(ira_config_path, 'r') as f:
+                        ira_config = yaml.safe_load(f)
+                    print(f"[INFO] ✓ Loaded IRA config from {ira_config_path}")
+                else:
+                    print(f"[INFO] ⚠ Config file not found - using fallback config")
+                    ira_config = None
+
+                people_manager = IRACharacterManager(
+                    config=ira_config,
+                    project_root=project_root,
+                    verbose=True,
+                )
+                success = people_manager.initialize()
+                if success:
+                    num_chars = people_manager.get_character_count()
+                    print(f"[INFO] ✓ IRA initialization successful ({num_chars} characters)")
+                else:
+                    print(f"[INFO] ✗ IRA initialization failed - continuing without people")
+            except Exception as e:
+                print(f"[INFO] ⚠ IRA backend failed: {e} - using legacy backend")
+                args_cli.people_backend = "legacy"
+
+        if args_cli.people_backend == "legacy":
+            print(f"[INFO] Using legacy backend for animated people (omni.anim.people)")
+            try:
+                from people import PeopleSceneManager
+                if hasattr(env_cfg, 'people'):
+                    people_cfg = env_cfg.people
+                    print("[INFO] Using people configuration from environment")
+                else:
+                    from digital_twin_colibri_g1.tasks.manager_based.digital_twin_colibri_g1.people_env_cfg import PeopleManagerCfg
+                    people_cfg = PeopleManagerCfg()
+                    print("[INFO] Using default people configuration")
+
+                people_manager = PeopleSceneManager(people_cfg, os.path.join(project_root, "digital_twin_colibri_g1"))
+                people_manager.initialize(stage)
+                print(f"[INFO] ✓ Legacy initialization complete")
+            except Exception as e:
+                print(f"[INFO] ⚠ Legacy initialization failed: {e}")
+
+        print("[INFO] ===================================================\n")
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):

@@ -24,55 +24,55 @@
 #   - Positions should stay within spawn area to avoid collisions with walls
 
 # ============================================
-# Character 0 - Clockwise patrol pattern
+# Character 0 - Condensed patrol pattern
 # ============================================
-# Walks in a square pattern around the center of the room
+# Walks in a small rectangle in front of the robot
 
-Character_0 GoTo 2.0 2.0 1.2 0
+Character_0 GoTo 1.5 1.0 1.2 0
 Character_0 Idle 2
-Character_0 GoTo 2.0 -2.0 1.2 270
+Character_0 GoTo 2.0 -1.0 1.2 270
 Character_0 LookAround 2
-Character_0 GoTo -2.0 -2.0 1.2 180
+Character_0 GoTo 1.5 -1.0 1.2 180
 Character_0 Idle 3
-Character_0 GoTo -2.0 2.0 1.2 90
+Character_0 GoTo 1.0 1.0 1.2 90
 Character_0 LookAround 2
 
 # ============================================
-# Character 1 - Counter-clockwise patrol
+# Character 1 - Opposite side patrol
 # ============================================
-# Walks in opposite direction to Character 0
+# Walks on the other side, closer to robot
 
-Character_1 GoTo -3.0 0.0 1.2 270
+Character_1 GoTo 2.0 0.5 1.2 270
 Character_1 LookAround 3
-Character_1 GoTo 0.0 3.0 1.2 0
+Character_1 GoTo 1.5 -0.5 1.2 0
 Character_1 Idle 2
-Character_1 GoTo 3.0 0.0 1.2 90
+Character_1 GoTo 2.5 0.0 1.2 90
 Character_1 LookAround 2
-Character_1 GoTo 0.0 -3.0 1.2 180
+Character_1 GoTo 1.0 0.0 1.2 180
 Character_1 Idle 2
 
 # ============================================
 # Character 2 (Optional) - Cross pattern
 # ============================================
-# Walks across the center, creating crossing paths
+# Walks across in front of robot
 
-Character_2 GoTo 0.0 2.5 1.2 0
+Character_2 GoTo 1.5 1.2 1.2 0
 Character_2 Idle 3
-Character_2 GoTo 0.0 -2.5 1.2 180
+Character_2 GoTo 1.5 -1.2 1.2 180
 Character_2 LookAround 2
-Character_2 GoTo 0.0 2.5 1.2 0
+Character_2 GoTo 2.0 0.0 1.2 0
 Character_2 Idle 2
 
 # ============================================
 # Character 3 (Optional) - Diagonal pattern
 # ============================================
-# Walks diagonally, good for challenging the robot
+# Short diagonal walks
 
-Character_3 GoTo -2.5 -2.5 1.2 45
+Character_3 GoTo 1.0 -0.5 1.2 45
 Character_3 LookAround 2
-Character_3 GoTo 2.5 2.5 1.2 225
+Character_3 GoTo 2.5 1.0 1.2 225
 Character_3 Idle 3
-Character_3 GoTo -2.5 2.5 1.2 135
+Character_3 GoTo 1.5 0.5 1.2 135
 Character_3 LookAround 2
-Character_3 GoTo 2.5 -2.5 1.2 315
+Character_3 GoTo 2.0 -0.5 1.2 315
 Character_3 Idle 2

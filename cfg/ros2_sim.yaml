@@ -1,5 +1,8 @@
 # ROS2 Sim2Sim Configuration for Colibri G1 Digital Twin
-# Phase 6: Sim2Sim ROS2 Integration
+# Phase 7: Unitree G1 Real Robot Compatibility
+#
+# This configuration follows Unitree's /lowstate, /lowcmd patterns for
+# seamless sim2real transfer with the real G1 robot.
 
 # Simulation Settings
 num_envs: 1 # Single robot for sim2sim (required)
@@ -13,12 +16,31 @@ scene:
 
 # ROS2 Settings
 ros2:
-  namespace: "colibri_g1" # Topic namespace
-  publish_tf: true # Enable TF broadcasting
-  publish_clock: true # Publish simulation time
-  publish_rate: 25 # Hz (for odometry, joint states)
+  # Topic configuration
+  # Primary Unitree-pattern topics: /lowstate, /lowcmd
+  # Custom namespaced topics: /colibri_g1/lidar/point_cloud, /colibri_g1/goal_marker, etc.
+  namespace: "colibri_g1" # Used for custom topics and navigation
+
+  # Unitree-specific settings
+  use_unitree_topics: true # Use /lowstate, /lowcmd pattern (matches real robot)
+  lowstate_rate: 50 # Hz (real robot uses 500Hz high, 50Hz low frequency)
+
+  # Control mode
+  # "lowcmd" - Motor-level control via /lowcmd (for training, real robot)
+  # "cmd_vel" - Velocity control via /cmd_vel (for exploration, nav2)
+  control_mode: "lowcmd"
+
+  # TF and time synchronization
+  publish_tf: true # Enable TF broadcasting (map -> base_link -> sensors)
+  publish_clock: true # Publish simulation time via /clock
+
+  # Rate limiting for various topics
+  publish_rate: 50 # Hz (for /lowstate - motor states + IMU)
   goal_marker_rate: 1 # Hz (for goal visualization)
-  enable_cmd_vel_override: false # Allow external velocity commands
+
+  # External control (subscribers)
+  enable_lowcmd_control: true # Accept /lowcmd motor commands
+  enable_cmd_vel_control: true # Accept /cmd_vel velocity commands
 
 # Policy Settings
 policy:
@@ -50,11 +72,11 @@ sensor:
 
   # RTX LiDAR configuration
   # Uses Hesai XT32 (32-channel) for 360-degree environmental scanning
-  # Mounted on torso_link (like Go2's base) for consistent frame
+  # Mounted on torso_link for stable positioning and good visibility
   lidar:
     config: "Hesai_XT32_SD10" # RTX LiDAR preset (32-channel, 10Hz rotation)
     parent_link: "torso_link" # Mount on torso (stable reference frame)
-    translation: [0.2, 0.0, 0.4] # Forward and up from torso (above camera)
+    translation: [0.2, 0.0, 0.4] # Forward and up from torso
     orientation: [1.0, 0.0, 0.0, 0.0] # Identity quaternion (w, x, y, z)
     frame_id: "lidar_link" # ROS2 TF frame name
     publish_rate: 15 # Point cloud publish rate in Hz
@@ -78,6 +100,28 @@ performance:
   render_interval: 4 # Render every N simulation steps (decimation)
   headless: false # Run without GUI (set to true for better performance)
 
+# Topic Reference
+# ==================================
+# Published Topics (Unitree Pattern):
+#   /lowstate             - unitree_hg/LowState (motor + IMU) @ 50 Hz
+#   /utlidar/cloud        - sensor_msgs/PointCloud2 (LiDAR) @ 15 Hz
+#   /ground_truth/pose    - geometry_msgs/PoseStamped @ 50 Hz
+#   /ground_truth/twist   - geometry_msgs/TwistStamped @ 50 Hz
+#   /clock                - rosgraph_msgs/Clock (via OmniGraph)
+#   /tf                   - tf2_msgs/TFMessage (map -> base_link -> sensors)
+#
+# Published Topics (Custom - Navigation & Sensors):
+#   /front_cam/color_image            - sensor_msgs/Image @ 50 Hz
+#   /front_cam/depth_image            - sensor_msgs/Image @ 50 Hz
+#   /colibri_g1/goal_marker           - visualization_msgs/Marker @ 1 Hz
+#   /colibri_g1/navigation/goal_pose  - geometry_msgs/PoseStamped @ 1 Hz
+#   /colibri_g1/navigation/distance_to_goal - std_msgs/Float32 @ 1 Hz
+#   /colibri_g1/navigation/status     - std_msgs/String @ 1 Hz
+#
+# Subscribed Topics:
+#   /lowcmd               - unitree_hg/LowCmd (motor commands)
+#   /cmd_vel              - geometry_msgs/Twist (velocity commands)
+#
 # Note: This configuration extends DigitalTwinColibriG1EnvCfg_PLAY
 # The following settings are inherited and do NOT need to be specified here:
 #   - Observations (includes goal position in base frame)

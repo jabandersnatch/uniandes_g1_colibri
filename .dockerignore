@@ -1,27 +1,76 @@
-# ignore .git related folders
+# Git
 .git/
 .github/
 .gitignore
-# ignore docs
+.gitattributes
+
+# Documentation (except licenses)
 docs/
-# copy in licenses folder to the container
 !docs/licenses/
-# ignore logs
+
+# Logs, runs, and outputs
 **/logs/
 **/runs/
 **/output/*
 **/outputs/*
 **/videos/*
 *.tmp
-# ignore docker
+
+# Docker
 docker/cluster/exports/
 docker/.container.cfg
-# ignore recordings
-recordings/
-# ignore __pycache__
-**/__pycache__/
-**/*.egg-info/
-# ignore isaac sim symlink
-_isaac_sim?
-# Docker history
 docker/.isaac-lab-docker-history
+
+# Recordings and media
+recordings/
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Python cache and build artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv
+isaaclab/
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Isaac Sim symlink
+_isaac_sim?
+
+# Cache directories
+.cache/
+.pytest_cache/
+.mypy_cache/
+.pre-commit-hooks
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*.swp
