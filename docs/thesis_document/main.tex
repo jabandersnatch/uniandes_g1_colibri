@@ -597,7 +597,7 @@ Figure \ref{fig:ros2_architecture} illustrates the fundamental ROS 2 communicati
 \node[font=\sffamily\tiny, color=black!50, above=0.1cm of actuator.north] {Process 3};
 
 \end{tikzpicture}
-\caption{ROS 2 publish-subscribe architecture. Nodes are independent processes that communicate through typed topics. Publishers send messages without knowledge of subscribers, and subscribers receive messages without knowledge of publishers. The DDS middleware layer handles discovery, serialization, and transport, enabling distributed communication with configurable quality-of-service policies.}
+\caption[ROS 2 pub-sub architecture]{ROS 2 publish-subscribe architecture. Nodes are independent processes that communicate through typed topics. Publishers send messages without knowledge of subscribers, and subscribers receive messages without knowledge of publishers. The DDS middleware layer handles discovery, serialization, and transport, enabling distributed communication with configurable quality-of-service policies.}
 \label{fig:ros2_architecture}
 \end{figure}
 
@@ -2133,7 +2133,7 @@ The deeper network architecture (four hidden layers instead of three) provides a
 
 \newpage
 
-\section{Results and Discussion}
+\section{Results}
 
 This section presents the experimental results from training and evaluating reinforcement learning policies across two distinct task configurations:
 

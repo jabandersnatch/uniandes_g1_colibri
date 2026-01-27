@@ -1,0 +1,149 @@
+\documentclass[tikz,border=15pt]{standalone}
+\usepackage{times}
+\usepackage{amsmath,amssymb}
+\usetikzlibrary{positioning,fit,arrows.meta,backgrounds,shapes.geometric,shapes.misc}
+
+\begin{document}
+\begin{tikzpicture}[
+    node distance=0.6cm and 1.2cm,
+    box/.style={
+        draw=black!70,
+        rounded corners=2mm,
+        fill=white,
+        thick,
+        font=\sffamily\small,
+        align=center,
+        drop shadow={opacity=0.15, shadow xshift=0.04cm, shadow yshift=-0.04cm}
+    },
+    section/.style={
+        font=\sffamily\bfseries\normalsize,
+        color=black!80,
+        anchor=west
+    },
+    eqn/.style={
+        font=\ttfamily\footnotesize,
+        color=black!70,
+        anchor=west
+    }
+]
+
+% ============================================================
+% STATE SPACE DEFINITION
+% ============================================================
+\node[section] at (0, 11.5) {1. State Space Definition};
+
+\node[box, text width=7cm, align=left, fill=blue!8] at (0, 10.5) {
+$\displaystyle s_t = \left[\mathbf{v}_t, \mathbf{q}_t, \dot{\mathbf{q}}_t, \mathbf{g}_t, \mathbf{a}_t\right]$
+};
+
+\node[eqn, text width=7cm] at (0, 9.8) {
+where:\\
+$\mathbf{v}_t = [v_x, v_y, \omega_z]$ — base velocity (3D)\\
+$\mathbf{q}_t = [q_1, \ldots, q_{29}]$ — joint positions (29D)\\
+$\dot{\mathbf{q}}_t$ — joint velocities (29D)\\
+$\mathbf{g}_t = [g_x, g_y]$ — goal in base frame (2D)\\
+$\mathbf{a}_t = [\ddot{x}, \ddot{y}, \ddot{z}, \omega_x, \omega_y, \omega_z]$ — IMU acceleration (6D)
+};
+
+\node[box, text width=7cm, fill=blue!12] at (0, 8.2) {
+$\boxed{|\mathbf{s}_t| = 3 + 29 + 29 + 2 + 6 = 69 \text{ (base state)}}$\\
+$\boxed{|\mathbf{s}_t| = 69 + 56 \text{ history} = 125 \text{ (full obs)}}$
+};
+
+% ============================================================
+% ACTION SPACE DEFINITION
+% ============================================================
+\node[section] at (0, 7.2) {2. Action Space Definition};
+
+\node[box, text width=7cm, align=left, fill=orange!8] at (0, 6.2) {
+$\displaystyle a_t = [q_d^1, q_d^2, \ldots, q_d^{29}] \in [-\pi, \pi]^{29}$
+};
+
+\node[eqn, text width=7cm] at (0, 5.5) {
+where:\\
+$q_d^i$ — desired joint angle for joint $i$\\
+Motor PD controller: $\tau_i = K_p (q_d^i - q_i) + K_d (\dot{q}_d^i - \dot{q}_i)$\\
+$K_p = 20.0$, $K_d = 0.5$ (Isaac Lab defaults)
+};
+
+\node[box, text width=7cm, fill=orange!12] at (0, 4.3) {
+$\boxed{|\mathbf{a}_t| = 29 \text{ dimensions}}$
+};
+
+% ============================================================
+% REWARD FUNCTION
+% ============================================================
+\node[section] at (0, 3.0) {3. Reward Function};
+
+\node[box, text width=7cm, align=left, fill=green!8] at (0, 1.8) {
+$\displaystyle R_t = w_v R_v^t + w_d R_d^t + w_a R_a^t + w_s R_s^t + R_{term}^t$
+};
+
+\node[eqn, text width=7cm] at (0, 0.6) {
+$R_v^t = \exp\left(-\frac{(|v_t| - v_{ref})^2}{2\sigma_v^2}\right)$ — velocity tracking\\
+$R_d^t = \exp\left(-\frac{||\mathbf{g}_t||^2}{\sigma_d^2}\right)$ — distance to goal\\
+$R_a^t = \cos(\theta_{error})$ — heading alignment\\
+$R_s^t = -||a_t||_2^2$ — action smoothness\\
+$R_{term}^t = R_{success} \cdot \mathbb{1}_{dist < \epsilon}$ — goal reached bonus
+};
+
+% ============================================================
+% RETURN (RIGHT SIDE)
+% ============================================================
+\node[section] at (8, 11.5) {4. Trajectory Return};
+
+\node[box, text width=6.5cm, align=left, fill=purple!8] at (8, 10.3) {
+$\displaystyle G_t = \sum_{\tau=t}^{T} \gamma^{\tau-t} R_\tau$
+};
+
+\node[eqn, text width=6.5cm] at (8, 9.3) {
+where:\\
+$\gamma = 0.99$ — discount factor\\
+$T = 500$ — episode length (50 seconds at 10 Hz)\\
+$R_\tau$ — reward at step $\tau$
+};
+
+% ============================================================
+% POLICY & VALUE FUNCTIONS
+% ============================================================
+\node[section] at (8, 8.0) {5. Policy Functions};
+
+\node[box, text width=6.5cm, align=left, fill=purple!8] at (8, 6.8) {
+$\displaystyle \pi_\theta(a_t | s_t) \sim \mathcal{N}(\mu_\theta(s_t), \sigma_\theta(s_t))$\\
+$\displaystyle V_\phi(s_t)$ — state value function
+};
+
+\node[eqn, text width=6.5cm] at (8, 5.6) {
+Architecture: 2-layer MLP\\
+Hidden size: $256$ neurons\\
+Activation: ReLU\\
+Output: mean $\mu_\theta$, std $\sigma_\theta$
+};
+
+% ============================================================
+% TERMINATION CONDITION
+% ============================================================
+\node[section] at (8, 4.3) {6. Episode Termination};
+
+\node[box, text width=6.5cm, align=left, fill=red!8] at (8, 3.3) {
+Episode terminates when:
+};
+
+\node[eqn, text width=6.5cm] at (8, 2.0) {
+$\mathbb{1}_{success}$ if $||\mathbf{g}_t|| < 0.2$ m\\
+$\mathbb{1}_{timeout}$ if $t > T = 500$ steps\\
+$\mathbb{1}_{fall}$ if $h_{CoM} < 0.3$ m (base height)
+};
+
+% ============================================================
+% CONSTRAINT FUNCTION
+% ============================================================
+\node[section] at (8, 0.5) {7. Physical Constraints};
+
+\node[box, text width=6.5cm, align=left, fill=red!8] at (8, -0.8) {
+$q_i^{min} \leq q_i(t) \leq q_i^{max}$ for all $i$\\
+$|\tau_i(t)| \leq \tau_i^{max}$ (enforced by motor controller)
+};
+
+\end{tikzpicture}
+\end{document}

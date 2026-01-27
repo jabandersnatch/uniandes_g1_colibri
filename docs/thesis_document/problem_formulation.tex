@@ -1,0 +1,403 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{geometry}
+\geometry{left=40mm,right=20mm,top=30mm,bottom=30mm}
+\usepackage{setspace}
+\setstretch{1.5}
+\usepackage{times}
+
+\title{Problem Formulation: Reinforcement Learning for Humanoid Robot Locomotion}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+This document presents the formal mathematical formulation of the problem addressed in this thesis: the development of a reinforcement learning framework for goal-directed locomotion of the Unitree G1 humanoid robot using a digital twin implemented in Isaac Lab.
+
+\section{Problem Statement}
+
+We consider the problem of training a control policy for a humanoid robot to navigate towards randomly sampled goal positions while maintaining stability and executing smooth movements. The policy is learned through reinforcement learning in a simulated environment and is designed to facilitate transfer to the real robotic platform.
+
+\section{Markov Decision Process Formulation}
+
+The locomotion problem is modeled as a finite-horizon Markov Decision Process (MDP) defined by the tuple $\mathcal{M} = \langle \mathcal{S}, \mathcal{A}, \mathcal{P}, \mathcal{R}, \rho_0, \gamma, T \rangle$.
+
+\subsection{State Space}
+
+The state space $\mathcal{S} \subseteq \mathbb{R}^n$ represents the complete information available to the learning agent at each timestep. The state at time $t$ is denoted as $s_t \in \mathcal{S}$.
+
+\subsubsection{State Representation}
+
+The state $s_t$ is composed of the following components:
+
+\begin{equation}
+s_t = \left[ \mathbf{v}_t, \mathbf{q}_t, \dot{\mathbf{q}}_t, \mathbf{g}_t, \mathbf{a}_t \right]^T \in \mathbb{R}^{n_s}
+\end{equation}
+
+where:
+
+\begin{itemize}
+\item $\mathbf{v}_t = [v_x^t, v_y^t, \omega_z^t]^T \in \mathbb{R}^3$ is the linear and angular velocity of the robot's base expressed in the base frame:
+\begin{equation}
+\mathbf{v}_t = \left[ \dot{x}^t, \dot{y}^t, \dot{\theta}_z^t \right]^T
+\end{equation}
+
+\item $\mathbf{q}_t = [q_1^t, q_2^t, \ldots, q_{29}^t]^T \in \mathbb{R}^{29}$ is the vector of joint positions for all 29 degrees of freedom of the Unitree G1 robot, constrained by:
+\begin{equation}
+q_i^{\min} \leq q_i^t \leq q_i^{\max} \quad \forall i \in \{1, 2, \ldots, 29\}
+\end{equation}
+
+\item $\dot{\mathbf{q}}_t = [\dot{q}_1^t, \dot{q}_2^t, \ldots, \dot{q}_{29}^t]^T \in \mathbb{R}^{29}$ is the vector of joint velocities
+
+\item $\mathbf{g}_t = [g_x^t, g_y^t]^T \in \mathbb{R}^2$ is the goal position relative to the robot's base expressed in the base frame (base-centric coordinates)
+
+\item $\mathbf{a}_t = [\ddot{x}_t, \ddot{y}_t, \ddot{z}_t, \omega_x^t, \omega_y^t, \omega_z^t]^T \in \mathbb{R}^6$ is the linear acceleration and angular velocity measured by the inertial measurement unit (IMU)
+\end{itemize}
+
+\subsubsection{Observation Space}
+
+The observation space $\mathcal{O} \subseteq \mathbb{R}^{n_o}$ contains the observations available to the policy. Due to computational limitations and the need for temporal context in neural network training, observations include a history of past states:
+
+\begin{equation}
+o_t = [s_t, s_{t-1}, \ldots, s_{t-h+1}]^T \in \mathbb{R}^{n_o}
+\end{equation}
+
+where $h$ is the history length. The total observation dimension is:
+
+\begin{equation}
+n_o = h \times n_s = 8 \times (3 + 29 + 29 + 2 + 6) = 8 \times 69 = 552 \text{ (with history)}
+\end{equation}
+
+However, in practice, privileged information compression is applied during training, resulting in:
+
+\begin{equation}
+n_o = 125 \text{ (effective observation dimension)}
+\end{equation}
+
+\subsection{Action Space}
+
+The action space $\mathcal{A} \subseteq \mathbb{R}^m$ defines the set of possible actions the agent can take. The action at time $t$ is denoted as $a_t \in \mathcal{A}$.
+
+\subsubsection{Action Representation}
+
+The action is defined as a vector of desired joint positions:
+
+\begin{equation}
+a_t = [q_d^{1,t}, q_d^{2,t}, \ldots, q_d^{29,t}]^T \in [-\pi, \pi]^{29}
+\end{equation}
+
+where $q_d^{i,t}$ is the desired target angle for joint $i$ at timestep $t$.
+
+\subsubsection{Motor Control}
+
+The desired joint angles are converted to motor commands through a proportional-derivative (PD) controller:
+
+\begin{equation}
+\tau_i^t = K_p^i \left( q_d^{i,t} - q_i^t \right) + K_d^i \left( \dot{q}_d^{i,t} - \dot{q}_i^t \right)
+\end{equation}
+
+where:
+\begin{itemize}
+\item $\tau_i^t$ is the torque command for joint $i$
+\item $K_p^i$ is the proportional gain (set to 20.0 for all joints)
+\item $K_d^i$ is the derivative gain (set to 0.5 for all joints)
+\item $\dot{q}_d^{i,t}$ is the desired joint velocity, computed from the action history
+\end{itemize}
+
+The motor torques are subject to physical constraints:
+
+\begin{equation}
+|\tau_i^t| \leq \tau_i^{\max} \quad \forall i \in \{1, 2, \ldots, 29\}
+\end{equation}
+
+\subsection{Transition Dynamics}
+
+The state transition follows the deterministic physics simulation provided by Isaac Lab:
+
+\begin{equation}
+s_{t+1} = f(s_t, a_t)
+\end{equation}
+
+where $f$ is the forward dynamics function implemented in the Isaac Sim physics engine. The transition is deterministic in the sense that given identical initial conditions and actions, the resulting state is identical. However, in practice, we treat it as stochastic due to the introduction of action noise during training.
+
+\subsection{Reward Function}
+
+The reward function $\mathcal{R}: \mathcal{S} \times \mathcal{A} \times \mathcal{S} \to \mathbb{R}$ provides learning signal to the agent:
+
+\begin{equation}
+r_t = R(s_t, a_t, s_{t+1})
+\end{equation}
+
+The total reward at each timestep is a weighted combination of multiple reward terms:
+
+\begin{equation}
+r_t = w_v r_v^t + w_d r_d^t + w_a r_a^t + w_s r_s^t + r_{\text{term}}^t
+\end{equation}
+
+\subsubsection{Velocity Tracking Reward}
+
+This reward encourages the robot to track a reference velocity:
+
+\begin{equation}
+r_v^t = \exp\left( -\frac{(||\mathbf{v}_t|| - v_{\text{ref}})^2}{2\sigma_v^2} \right)
+\end{equation}
+
+where:
+\begin{itemize}
+\item $||\mathbf{v}_t|| = \sqrt{(v_x^t)^2 + (v_y^t)^2 + (\omega_z^t)^2}$ is the combined velocity magnitude
+\item $v_{\text{ref}} \in \{0.0, 0.5, 1.0, 1.5\} \text{ m/s}$ is the reference velocity command
+\item $\sigma_v = 0.2$ is the standard deviation of the Gaussian reward
+
+\subsubsection{Distance to Goal Reward}
+
+This reward encourages the robot to move towards the goal:
+
+\begin{equation}
+r_d^t = \exp\left( -\frac{||\mathbf{g}_t||^2}{\sigma_d^2} \right)
+\end{equation}
+
+where:
+\begin{itemize}
+\item $||\mathbf{g}_t|| = \sqrt{(g_x^t)^2 + (g_y^t)^2}$ is the distance to the goal
+\item $\sigma_d = 2.0$ controls the reward spread
+
+\subsubsection{Heading Alignment Reward}
+
+This reward encourages the robot to align its heading with the goal direction:
+
+\begin{equation}
+r_a^t = \cos(\theta_{\text{error}}^t)
+\end{equation}
+
+where $\theta_{\text{error}}^t$ is the angular difference between the robot's heading and the direction to the goal:
+
+\begin{equation}
+\theta_{\text{error}}^t = \arctan2(g_y^t, g_x^t) - \psi_t
+\end{equation}
+
+with $\psi_t$ being the robot's yaw angle in the world frame.
+
+\subsubsection{Action Smoothness Reward}
+
+This reward penalizes large changes in joint commands to promote smooth movements:
+
+\begin{equation}
+r_s^t = -\alpha \, ||a_t - a_{t-1}||_2^2
+\end{equation}
+
+where $\alpha = 0.01$ is the smoothness penalty weight.
+
+\subsubsection{Termination Reward}
+
+A bonus reward is given when the robot successfully reaches the goal:
+
+\begin{equation}
+r_{\text{term}}^t = \begin{cases}
+R_{\text{success}} = 5.0 & \text{if } ||\mathbf{g}_t|| < \epsilon_g \\
+0 & \text{otherwise}
+\end{cases}
+\end{equation}
+
+where $\epsilon_g = 0.2 \text{ m}$ is the goal tolerance.
+
+\subsubsection{Reward Weights}
+
+The relative importance of each reward component is controlled by weight parameters:
+
+\begin{equation}
+(w_v, w_d, w_a, w_s) = (1.0, 1.0, 0.5, 0.01)
+\end{equation}
+
+\subsection{Episode Termination}
+
+An episode terminates when any of the following conditions is met:
+
+\begin{equation}
+\text{terminal}(s_t) = \begin{cases}
+\text{True} & \text{if } t \geq T \\
+\text{True} & \text{if } ||\mathbf{g}_t|| < \epsilon_g \text{ (goal reached)} \\
+\text{True} & \text{if } h_{\text{CoM}} < h_{\min} \text{ (fall)} \\
+\text{False} & \text{otherwise}
+\end{cases}
+\end{equation}
+
+where:
+\begin{itemize}
+\item $T = 500$ is the maximum episode length (50 seconds at 10 Hz control frequency)
+\item $h_{\min} = 0.3 \text{ m}$ is the minimum center-of-mass height threshold
+\end{itemize}
+
+\subsection{Initial State Distribution}
+
+The initial state is sampled from a distribution $\rho_0$:
+
+\begin{equation}
+s_0 \sim \rho_0
+\end{equation}
+
+In this work, the initial state is determined by:
+
+\begin{itemize}
+\item Base position: reset to a fixed location
+\item Joint configuration: reset to a nominal standing pose
+\item Joint velocities: initialized to zero
+\item Goal position: sampled uniformly from a circular region
+\end{itemize}
+
+The goal position is sampled according to:
+
+\begin{equation}
+\mathbf{g}_0 \sim \text{Uniform}(\{(x, y) : 1.0 \leq \sqrt{x^2 + y^2} \leq 3.0\})
+\end{equation}
+
+\subsection{Discount Factor and Horizon}
+
+The discount factor is set to:
+
+\begin{equation}
+\gamma = 0.99
+\end{equation}
+
+This implies that rewards 10 timesteps in the future are weighted approximately 90\% of their immediate importance. The finite horizon $T = 500$ ensures that episodes have bounded length.
+
+\section{Policy Learning Problem}
+
+\subsection{Trajectory Return}
+
+For a trajectory $(s_0, a_0, r_0, \ldots, s_T, a_T, r_T)$, the cumulative discounted return starting from timestep $t$ is:
+
+\begin{equation}
+G_t = \sum_{\tau=t}^{T} \gamma^{\tau - t} r_\tau
+\end{equation}
+
+\subsection{Policy and Value Functions}
+
+The policy is represented as a stochastic mapping:
+
+\begin{equation}
+\pi_\theta: \mathcal{S} \to \mathbb{P}(\mathcal{A})
+\end{equation}
+
+In this work, the policy is parameterized as a Gaussian distribution:
+
+\begin{equation}
+\pi_\theta(a | s) = \mathcal{N}(\mu_\theta(s), \Sigma_\theta(s))
+\end{equation}
+
+where:
+\begin{itemize}
+\item $\mu_\theta(s) \in \mathbb{R}^{29}$ is the mean action, computed by a neural network with parameters $\theta$
+\item $\Sigma_\theta(s) = \text{diag}(\sigma_1^2, \ldots, \sigma_{29}^2)$ is the diagonal covariance matrix
+\item The standard deviations $\sigma_i$ are learned as part of training
+\end{itemize}
+
+The state-value function is defined as:
+
+\begin{equation}
+V_\phi(s) = \mathbb{E}_{a \sim \pi_\theta(\cdot | s)} \left[ G_t \mid s_t = s \right]
+\end{equation}
+
+which estimates the expected return from state $s$ following policy $\pi_\theta$.
+
+\subsection{Optimization Objective}
+
+The goal is to find the policy parameters $\theta^*$ that maximize the expected return:
+
+\begin{equation}
+\theta^* = \arg\max_\theta \mathbb{E}_{s \sim \rho_0} \left[ G_0 \right]
+\end{equation}
+
+This is equivalent to maximizing:
+
+\begin{equation}
+J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T} \gamma^t r_t \right]
+\end{equation}
+
+where $\tau$ denotes a trajectory sampled from the policy $\pi_\theta$.
+
+\section{Implementation Details}
+
+\subsection{Neural Network Architecture}
+
+Both the policy and value function are implemented as multilayer perceptrons (MLPs):
+
+\begin{equation}
+\mu_\theta(s) = W_2^T \sigma(W_1^T s + b_1) + b_2
+\end{equation}
+
+where:
+\begin{itemize}
+\item Input dimension: $n_o = 125$ (observation size)
+\item Hidden layer dimension: $d_h = 256$
+\item Output dimension: $n_a = 29$ (action size)
+\item Activation function: $\sigma(\cdot) = \max(0, \cdot)$ (ReLU)
+\item Weights: $W_1 \in \mathbb{R}^{125 \times 256}$, $W_2 \in \mathbb{R}^{256 \times 29}$
+\item Biases: $b_1 \in \mathbb{R}^{256}$, $b_2 \in \mathbb{R}^{29}$
+\end{itemize}
+
+The value function follows a similar architecture with output dimension 1.
+
+\subsection{Training Algorithm}
+
+The policy is trained using Proximal Policy Optimization (PPO), a state-of-the-art on-policy reinforcement learning algorithm. The training procedure iteratively collects rollouts and updates the policy to maximize a surrogate objective:
+
+\begin{equation}
+L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min(r_t(\theta) \hat{A}_t, \text{clip}(r_t(\theta), 1 - \epsilon, 1 + \epsilon) \hat{A}_t) \right]
+\end{equation}
+
+where:
+\begin{itemize}
+\item $r_t(\theta) = \frac{\pi_\theta(a_t | s_t)}{\pi_{\theta_{\text{old}}}(a_t | s_t)}$ is the probability ratio
+\item $\hat{A}_t$ is the estimated advantage function
+\item $\epsilon = 0.2$ is the clipping parameter
+\end{itemize}
+
+\section{Summary of Hyperparameters}
+
+Table \ref{tab:hyperparams} summarizes the key hyperparameters used in this problem formulation:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Parameter} & \textbf{Symbol} & \textbf{Value} \\
+\hline
+Observation dimension & $n_o$ & 125 \\
+Action dimension & $n_a$ & 29 \\
+Episode length & $T$ & 500 \\
+Maximum joint position & $q_i^{\max}$ & $\pi$ rad \\
+Minimum joint position & $q_i^{\min}$ & $-\pi$ rad \\
+Goal sampling radius (min) & - & 1.0 m \\
+Goal sampling radius (max) & - & 3.0 m \\
+Goal tolerance & $\epsilon_g$ & 0.2 m \\
+Minimum CoM height & $h_{\min}$ & 0.3 m \\
+Discount factor & $\gamma$ & 0.99 \\
+Control frequency & - & 10 Hz \\
+Proportional gain & $K_p$ & 20.0 \\
+Derivative gain & $K_d$ & 0.5 \\
+Hidden layer size & $d_h$ & 256 \\
+Velocity tracking weight & $w_v$ & 1.0 \\
+Distance reward weight & $w_d$ & 1.0 \\
+Alignment reward weight & $w_a$ & 0.5 \\
+Smoothness weight & $w_s$ & 0.01 \\
+Success bonus & $R_{\text{success}}$ & 5.0 \\
+Velocity tracking std & $\sigma_v$ & 0.2 \\
+Distance reward std & $\sigma_d$ & 2.0 \\
+\hline
+\end{tabular}
+\caption{Summary of hyperparameters in the problem formulation.}
+\label{tab:hyperparams}
+\end{table}
+
+\section{Conclusion}
+
+This formal problem formulation defines a finite-horizon MDP for humanoid robot locomotion with clearly specified state and action spaces, reward structure, and learning objectives. The framework is designed to enable the training of a control policy in simulation that can be subsequently validated through sim-to-sim transfer and eventually deployed on the real Unitree G1 robot.
+
+\end{document}
