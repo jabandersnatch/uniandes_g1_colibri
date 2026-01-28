@@ -226,7 +226,7 @@ class DigitalTwinColibriG1SocialNavEnvCfg(DigitalTwinColibriG1EnvCfg):
 
             # RayCaster only supports static meshes (cannot detect dynamic RigidObjects like cylinders)
             # Each environment has its own isolated lab (ColibriLab), so use ENV_REGEX_NS
-            mesh_prim_paths=["{ENV_REGEX_NS}/ground"],
+            mesh_prim_paths=["/World/ground"],
 
             # Disable visualization for training
             debug_vis=False,
@@ -408,7 +408,7 @@ class DigitalTwinColibriG1SocialNavEnvCfg_PLAY(DigitalTwinColibriG1EnvCfg_PLAY):
 
             # RayCaster only supports static meshes (cannot detect dynamic RigidObjects like cylinders)
             # Each environment has its own isolated lab (ColibriLab), so use ENV_REGEX_NS
-            mesh_prim_paths=["{ENV_REGEX_NS}/ground"],
+            mesh_prim_paths=["/World/ground"],
 
             # Disable visualization to avoid callback errors during initialization
             debug_vis=False,
