@@ -185,13 +185,13 @@ class DigitalTwinColibriG1SocialNavEnvCfg(DigitalTwinColibriG1EnvCfg):
         # SCENE: Adjust for LiDAR + Cylinders
         # ============================================
 
-        # Reduced environments for larger spacing (compensates for memory)
-        # Each environment needs isolated space for cylinder movement
-        self.scene.num_envs = 64
+        # Match base locomotion task environment spacing for efficiency
+        # Cylinders spawn/move within their radius range without overlap
+        self.scene.num_envs = 128
 
-        # Large spacing for isolated environments
-        # With 15m spacing, cylinders can move in 5m radius without overlap
-        self.scene.env_spacing = 15.0
+        # Same spacing as base task for compact training
+        # Cylinders move in spawn_radius_min/max range (2-5m)
+        self.scene.env_spacing = 0.2
 
         # ============================================
         # SENSORS: Add RayCaster LiDAR for STATIC obstacle detection
