@@ -284,6 +284,16 @@ class DigitalTwinColibriG1EnvCfg_PLAY(DigitalTwinColibriG1EnvCfg):
         self.commands.base_velocity.rel_standing_envs = 0.0
 
         # ============================================
+        # AGGRESSIVE GOAL REACHING for PLAY mode
+        # ============================================
+
+        # Override velocity scaling to be more aggressive about reaching goals
+        # This ensures robots actually reach goals in visualization
+        # (Option A: More aggressive - min_vel_ratio=0.7, distance_scaling=1.0)
+        self.commands.base_velocity.min_velocity_ratio = 0.7  # Maintain 70% speed when close (was 0.2)
+        self.commands.base_velocity.distance_scaling_factor = 1.0  # Start reducing speed within 1.0m (was 3.0)
+
+        # ============================================
         # OPTIONAL: Fixed velocity commands for demo
         # ============================================
 
