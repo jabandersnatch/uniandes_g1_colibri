@@ -474,6 +474,14 @@ class DigitalTwinColibriG1SocialNavEnvCfg_PLAY(DigitalTwinColibriG1EnvCfg_PLAY):
         )
 
         # ============================================
+        # GOAL REACHING THRESHOLD for PLAY mode
+        # ============================================
+
+        # Increase goal reaching threshold from 0.3m to 0.5m in PLAY mode
+        # This prevents robots from getting stuck near goals in visualization
+        self.commands.goal_position.goal_reaching_threshold = 0.5
+
+        # ============================================
         # OBSERVATIONS: Same as training for policy compatibility
         # ============================================
 

@@ -105,8 +105,9 @@ class SimpleGoalCommand(CommandTerm):
         )
         self.metrics["distance_to_goal"] = distance
 
-        # Check if goal is reached (within 0.3m threshold - tighter requirement)
-        self.metrics["goal_reached"] = (distance < 0.3).float()
+        # Check if goal is reached (configurable threshold)
+        # Default 0.3m for training, can be increased to 0.5m for play mode
+        self.metrics["goal_reached"] = (distance < self.cfg.goal_reaching_threshold).float()
 
     def _resample_command(self, env_ids: Sequence[int], is_goal_reached: bool = False, use_transition: bool = True):
         """Sample new goal positions with optional smooth transition.

@@ -64,6 +64,18 @@ class SimpleGoalCommandCfg(CommandTermCfg):
     Default: 0.65 (moderate bias, allows some backward exploration)
     """
 
+    goal_reaching_threshold: float = 0.3
+    """Distance threshold (in meters) for detecting goal reached.
+
+    When the robot is closer than this distance to the goal, the goal is considered
+    "reached" and a new goal is resampled.
+
+    - 0.3: Tight threshold (training) - requires precise reaching
+    - 0.5: Relaxed threshold (play mode) - more forgiving for evaluation
+
+    Default: 0.3 meters (training mode)
+    """
+
     @configclass
     class Ranges:
         """Uniform distribution ranges for goal sampling."""

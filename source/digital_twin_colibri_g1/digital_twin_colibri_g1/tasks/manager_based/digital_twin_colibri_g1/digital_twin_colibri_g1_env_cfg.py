@@ -294,6 +294,16 @@ class DigitalTwinColibriG1EnvCfg_PLAY(DigitalTwinColibriG1EnvCfg):
         self.commands.base_velocity.distance_scaling_factor = 1.0  # Start reducing speed within 1.0m (was 3.0)
 
         # ============================================
+        # RELAX GOAL REACHING THRESHOLD for PLAY mode
+        # ============================================
+
+        # Increase goal reaching threshold from 0.3m to 0.5m in PLAY mode
+        # Robot with aggressive velocity scaling gets within 0.5m reliably
+        # Without this: Goal reached event never triggers, robot stands stuck
+        # With this: Event triggers at 0.5m, next goal is resampled, continuous navigation
+        self.commands.goal_position.goal_reaching_threshold = 0.5
+
+        # ============================================
         # OPTIONAL: Fixed velocity commands for demo
         # ============================================
 
