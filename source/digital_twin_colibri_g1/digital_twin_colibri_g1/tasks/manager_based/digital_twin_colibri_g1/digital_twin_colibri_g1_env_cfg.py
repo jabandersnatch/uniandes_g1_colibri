@@ -64,7 +64,7 @@ class DigitalTwinColibriG1EnvCfg(G1FlatEnvCfg):
         usd_path = ASSETS_DIR / "ColibriLab" / "ColibriLab.usd"
 
         self.scene.terrain = TerrainImporterCfg(
-            prim_path="/World/ground",
+            prim_path="{ENV_REGEX_NS}/ground",
             terrain_type="usd",
             usd_path=str(usd_path),
             terrain_generator=None,

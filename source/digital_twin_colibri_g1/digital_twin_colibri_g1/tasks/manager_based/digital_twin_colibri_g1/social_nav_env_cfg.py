@@ -225,8 +225,8 @@ class DigitalTwinColibriG1SocialNavEnvCfg(DigitalTwinColibriG1EnvCfg):
             drift_range=(0.0, 0.0),  # No sensor drift
 
             # RayCaster only supports static meshes (cannot detect dynamic RigidObjects like cylinders)
-            # ColibriLab parent path - broader detection for walls and floor geometry
-            mesh_prim_paths=["/World/ground"],
+            # Each environment has its own isolated lab (ColibriLab), so use ENV_REGEX_NS
+            mesh_prim_paths=["{ENV_REGEX_NS}/ground"],
 
             # Disable visualization for training
             debug_vis=False,
@@ -407,8 +407,8 @@ class DigitalTwinColibriG1SocialNavEnvCfg_PLAY(DigitalTwinColibriG1EnvCfg_PLAY):
             drift_range=(0.0, 0.0),
 
             # RayCaster only supports static meshes (cannot detect dynamic RigidObjects like cylinders)
-            # ColibriLab parent path - broader detection for walls and floor geometry
-            mesh_prim_paths=["/World/ground"],
+            # Each environment has its own isolated lab (ColibriLab), so use ENV_REGEX_NS
+            mesh_prim_paths=["{ENV_REGEX_NS}/ground"],
 
             # Disable visualization to avoid callback errors during initialization
             debug_vis=False,
