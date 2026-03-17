@@ -1661,7 +1661,7 @@
 \if@Mathphys@numrefstyle%
   \usepackage[numbers,sort&compress]{natbib}%
   \gdef\NumBib{YES}%
-  \bibliographystyle{sn-mathphys-num}%
+  \bibliographystyle{bst/sn-mathphys-num}%
   \setlength{\bibsep}{1em}%
   \def\bibfont{\reset@font\fontfamily{\rmdefault}\normalsize\selectfont}%
 \else%

@@ -57,6 +57,7 @@
 \usepackage{listings}%
 \usepackage{tikz}%
 \usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds,calc}%
+\usepackage{subcaption}%
 %%%%
 
 %%%%%=============================================================================%%%%
@@ -636,6 +637,39 @@ Training fall rate     & 5.95\%                 & At iteration 1\,500 \\
 \end{tabular}
 \end{table}
 
+Figure~\ref{fig:training_curves} shows the evolution of key training metrics over 1\,500 iterations.
+
+\begin{figure}[ht]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/training_episode_reward}
+  \caption{Episode reward}
+  \label{fig:train_reward}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/training_episode_length}
+  \caption{Episode length}
+  \label{fig:train_length}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/training_distance_to_goal}
+  \caption{Distance to goal}
+  \label{fig:train_distance}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/training_losses}
+  \caption{Actor/critic losses}
+  \label{fig:train_losses}
+\end{subfigure}
+\caption{Base locomotion training curves over 1\,500 PPO iterations.
+Reward and episode length converge monotonically; distance to goal decreases
+steadily; actor and critic losses stabilize, confirming policy convergence.}
+\label{fig:training_curves}
+\end{figure}
+
 The learned behavior exhibits several desirable characteristics:
 \begin{itemize}
     \item Stable alternating gait patterns
@@ -722,6 +756,46 @@ goal-distance reward weight ($+0.5$ total), and suggests that future formulation
 should either increase goal-reward magnitude, introduce curriculum learning
 (obstacle-free warm-up followed by progressive obstacle insertion), or adopt a
 hierarchical approach that decouples goal navigation from collision avoidance.
+
+Figure~\ref{fig:social_nav_curves} shows the training metrics for the social navigation experiment, confirming the failure to converge.
+
+\begin{figure}[ht]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/social_nav_episode_reward}
+  \caption{Episode reward}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/social_nav_goal_reached}
+  \caption{Goal success rate}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/social_nav_distance_to_goal}
+  \caption{Distance to goal}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/social_nav_obstacle_penalties}
+  \caption{Obstacle proximity penalties}
+\end{subfigure}
+\\[6pt]
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/social_nav_episode_length}
+  \caption{Episode length}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/social_nav_termination}
+  \caption{Termination causes}
+\end{subfigure}
+\caption{Social navigation training curves. Goal success rate (b) never exceeds 1\%;
+obstacle proximity penalties (d) dominate the reward signal throughout training,
+confirming the gradient imbalance ($2.6\times$) identified in the analysis.
+Episode length (e) remains low, indicating frequent early termination.}
+\label{fig:social_nav_curves}
+\end{figure}
 
 \subsection{Implications for Humanoid Robotics Research}
 The results obtained in this work highlight several important implications for humanoid robotics research.
