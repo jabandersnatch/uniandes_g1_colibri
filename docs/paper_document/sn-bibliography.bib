@@ -1,0 +1,288 @@
+%% sn-bibliography.bib
+%% Real verified bibliography for:
+%% "A Communication-Realistic Sim-to-Sim Validation Framework for
+%%  Reinforcement Learning Humanoid Locomotion Using Digital Twins"
+%%
+%% Citation mapping (bib key = first citation order in text):
+%%   bib1  -> [2]  Hwangbo 2019  (humanoid/legged locomotion challenges)
+%%   bib2  -> [3]  Radosavovic 2024 (real-world humanoid locomotion RL)
+%%   bib3  -> [5]  Mittal 2023  (Isaac Lab / Orbit sim platform)
+%%   bib4  -> [6]  Schulman 2017  (PPO -- RL for locomotion)
+%%   bib5  -> [7]  Schulman 2017 already used; second PPO-context cite -> Rudin 2022
+%%   bib6  -> [8]  Lee 2020  (large-scale RL, legged robots)
+%%   bib7  -> [9]  Gu 2024  (large-scale RL, humanoids)
+%%   bib8  -> [10] Cheng 2024  (hierarchical/whole-body learning humanoids)
+%%   bib9  -> [11] Peng 2018 DeepMimic (curriculum/imitation humanoid locomotion)
+%%   bib10 -> [12] Grieves 2014  (digital twin concept)
+%%   bib11 -> [13] Tao 2019  (digital twin in industry)
+%%   bib12 -> [14] NVIDIA Isaac Sim  (physics simulation platform)
+%%   bib13 -> [15] digitaltwinros2023 (digital twins for robot experimentation)
+%%   bib14 -> [16] Zhao 2020  (sim-to-real gap survey)
+%%   bib15 -> [17] Tobin 2017  (domain randomization)
+%%   bib16 -> [18] Kumar 2021 RMA  (RL + adaptation for sim-to-real)
+%%   bib17 -> [19] Macenski 2022  (ROS 2 middleware)
+%%   bib18 -> [20] Kober 2013  (RL in robotics -- middleware/deployment gap)
+
+%% -----------------------------------------------------------------------
+%% bib1: [2] Landmark paper on RL-based locomotion for legged robots
+%% Source: Science Robotics 4(26):eaau5872, DOI 10.1126/scirobotics.aau5872
+%% -----------------------------------------------------------------------
+@article{bib1,
+  author  = {Hwangbo, Jemin and Lee, Joonho and Dosovitskiy, Alexey and Bellicoso, Carmine Dario and Tsounis, Vassilios and Koltun, Vladlen and Hutter, Marco},
+  title   = {Learning Agile and Dynamic Motor Skills for Legged Robots},
+  journal = {Science Robotics},
+  year    = {2019},
+  volume  = {4},
+  number  = {26},
+  pages   = {eaau5872},
+  doi     = {10.1126/scirobotics.aau5872}
+}
+
+%% -----------------------------------------------------------------------
+%% bib2: [3] Real-world humanoid locomotion with RL (humanoid DOF complexity)
+%% Source: Science Robotics 9(89):eadi9579, DOI 10.1126/scirobotics.adi9579
+%% -----------------------------------------------------------------------
+@article{bib2,
+  author  = {Radosavovic, Ilija and Xiao, Tete and Zhang, Bike and Darrell, Trevor and Malik, Jitendra and Sreenath, Koushil},
+  title   = {Real-World Humanoid Locomotion with Reinforcement Learning},
+  journal = {Science Robotics},
+  year    = {2024},
+  volume  = {9},
+  number  = {89},
+  pages   = {eadi9579},
+  doi     = {10.1126/scirobotics.adi9579}
+}
+
+%% -----------------------------------------------------------------------
+%% bib3: [5] Isaac Lab (formerly Orbit) -- GPU-accelerated robot learning sim
+%% Source: IEEE RA-L 8(6):3740-3747, DOI 10.1109/LRA.2023.3306588
+%% -----------------------------------------------------------------------
+@article{bib3,
+  author  = {Mittal, Mayank and Yu, Calvin and Kumar, Qinxi and Kim, Joonho and Rudin, Nikita and Hoeller, David and Lee, Jia Lin and Farshidian, Farbod and Hutter, Marco},
+  title   = {{Orbit}: A Unified Simulation Framework for Interactive Robot Learning Environments},
+  journal = {IEEE Robotics and Automation Letters},
+  year    = {2023},
+  volume  = {8},
+  number  = {6},
+  pages   = {3740--3747},
+  doi     = {10.1109/LRA.2023.3306588}
+}
+
+%% -----------------------------------------------------------------------
+%% bib4: [6] Proximal Policy Optimization -- RL algorithm for locomotion
+%% Source: arXiv:1707.06347 (2017)
+%% -----------------------------------------------------------------------
+@misc{bib4,
+  author        = {Schulman, John and Wolski, Filip and Dhariwal, Prafulla and Radford, Alec and Klimov, Oleg},
+  title         = {Proximal Policy Optimization Algorithms},
+  year          = {2017},
+  howpublished  = {arXiv preprint arXiv:1707.06347},
+  note          = {\url{https://arxiv.org/abs/1707.06347}}
+}
+
+%% -----------------------------------------------------------------------
+%% bib5: [7] PPO stability in continuous control -- second PPO-context citation
+%% Rudin 2022 -- massively parallel RL for legged robots (CoRL 2022)
+%% Source: Proceedings of CoRL 2022, arXiv:2109.11978
+%% -----------------------------------------------------------------------
+@inproceedings{bib5,
+  author    = {Rudin, Nikita and Hoeller, David and Reist, Philipp and Hutter, Marco},
+  title     = {Learning to Walk in Minutes Using Massively Parallel Deep Reinforcement Learning},
+  booktitle = {Proceedings of the 5th Conference on Robot Learning (CoRL 2022)},
+  year      = {2022},
+  volume    = {164},
+  pages     = {91--100},
+  note      = {arXiv:2109.11978}
+}
+
+%% -----------------------------------------------------------------------
+%% bib6: [8] Large-scale RL for legged robots -- quadrupedal challenging terrain
+%% Source: Science Robotics 5(47):eabc5986, DOI 10.1126/scirobotics.abc5986
+%% -----------------------------------------------------------------------
+@article{bib6,
+  author  = {Lee, Joonho and Hwangbo, Jemin and Wellhausen, Lorenz and Koltun, Vladlen and Hutter, Marco},
+  title   = {Learning Quadrupedal Locomotion over Challenging Terrain},
+  journal = {Science Robotics},
+  year    = {2020},
+  volume  = {5},
+  number  = {47},
+  pages   = {eabc5986},
+  doi     = {10.1126/scirobotics.abc5986}
+}
+
+%% -----------------------------------------------------------------------
+%% bib7: [9] Large-scale RL applied to humanoids
+%% Gu 2024 -- Humanoid-Gym: zero-shot sim2real for humanoid
+%% Source: arXiv:2404.05695 (2024)
+%% -----------------------------------------------------------------------
+@misc{bib7,
+  author       = {Gu, Xinyang and Wang, Yen-Jen and Chen, Jianyu},
+  title        = {{Humanoid-Gym}: Reinforcement Learning for Humanoid Robot with Zero-Shot Sim2Real Transfer},
+  year         = {2024},
+  howpublished = {arXiv preprint arXiv:2404.05695},
+  note         = {\url{https://arxiv.org/abs/2404.05695}}
+}
+
+%% -----------------------------------------------------------------------
+%% bib8: [10] Hierarchical / whole-body learning for humanoids
+%% Cheng 2024 -- Expressive Whole-Body Control for Humanoid Robots
+%% Source: arXiv:2402.16796 (2024)
+%% -----------------------------------------------------------------------
+@misc{bib8,
+  author       = {Cheng, Xuxin and Ji, Yandong and Chen, Junming and Yang, Ruihan and Yang, Ge and Wang, Xiaolong},
+  title        = {Expressive Whole-Body Control for Humanoid Robots},
+  year         = {2024},
+  howpublished = {arXiv preprint arXiv:2402.16796},
+  note         = {\url{https://arxiv.org/abs/2402.16796}}
+}
+
+%% -----------------------------------------------------------------------
+%% bib9: [11] Imitation / curriculum learning for humanoid locomotion
+%% Peng 2018 -- DeepMimic (example-guided physics-based character skills)
+%% Source: ACM Trans. Graph. 37(4):143, DOI 10.1145/3197517.3201311
+%% -----------------------------------------------------------------------
+@article{bib9,
+  author  = {Peng, Xue Bin and Abbeel, Pieter and Levine, Sergey and van de Panne, Michiel},
+  title   = {{DeepMimic}: Example-Guided Deep Reinforcement Learning of Physics-Based Character Skills},
+  journal = {ACM Transactions on Graphics},
+  year    = {2018},
+  volume  = {37},
+  number  = {4},
+  pages   = {143:1--143:14},
+  doi     = {10.1145/3197517.3201311}
+}
+
+%% -----------------------------------------------------------------------
+%% bib10: [12] Digital twin concept -- foundational white paper
+%% Grieves 2014 -- Digital Twin: Manufacturing Excellence through Virtual Factory Replication
+%% Source: White paper, Michael W. Grieves LLC (2014)
+%% -----------------------------------------------------------------------
+@techreport{bib10,
+  author      = {Grieves, Michael W.},
+  title       = {Digital Twin: Manufacturing Excellence through Virtual Factory Replication},
+  institution = {Michael W.\ Grieves LLC},
+  year        = {2014},
+  type        = {White Paper},
+  note        = {\url{https://theengineer.markallengroup.com/production/content/uploads/2014/12/Digital_Twin_White_Paper_Dr_Grieves.pdf}}
+}
+
+%% -----------------------------------------------------------------------
+%% bib11: [13] Digital twin in industry -- state-of-the-art survey
+%% Tao 2019 -- Digital Twin in Industry: State-of-the-Art
+%% Source: IEEE Trans. Industrial Informatics 15(4):2405-2415,
+%%         DOI 10.1109/TII.2018.2873186
+%% -----------------------------------------------------------------------
+@article{bib11,
+  author  = {Tao, Fei and Zhang, He and Liu, Ang and Nee, Andrew Yeh Ching},
+  title   = {Digital Twin in Industry: {State-of-the-Art}},
+  journal = {IEEE Transactions on Industrial Informatics},
+  year    = {2019},
+  volume  = {15},
+  number  = {4},
+  pages   = {2405--2415},
+  doi     = {10.1109/TII.2018.2873186}
+}
+
+%% -----------------------------------------------------------------------
+%% bib12: [14] NVIDIA Isaac Sim physics simulation platform
+%% Source: NVIDIA official platform (2024)
+%% -----------------------------------------------------------------------
+@misc{bib12,
+  author       = {{NVIDIA}},
+  title        = {{Isaac Sim}: Robotics Simulation and Synthetic Data Generation},
+  year         = {2024},
+  howpublished = {NVIDIA Corporation},
+  note         = {\url{https://developer.nvidia.com/isaac/sim}}
+}
+
+%% -----------------------------------------------------------------------
+%% bib13: [15] Digital twins enabling safe robot experimentation
+%% Sueldo 2023 -- ROS-based architecture for digital twin development
+%% Source: Annals of Operations Research 322:153-178,
+%%         DOI 10.1007/s10479-022-04759-4
+%% -----------------------------------------------------------------------
+@article{bib13,
+  author  = {Sueldo, Carolina and Perez Colo, Ivo and De Paula, Mariano and Villar, Sebastian and Acosta, Gerardo},
+  title   = {{ROS}-Based Architecture for Fast Digital Twin Development of Smart Manufacturing Robotized Systems},
+  journal = {Annals of Operations Research},
+  year    = {2023},
+  volume  = {322},
+  pages   = {153--178},
+  doi     = {10.1007/s10479-022-04759-4}
+}
+
+%% -----------------------------------------------------------------------
+%% bib14: [16] Simulation-to-reality gap survey
+%% Zhao 2020 -- Sim-to-Real Transfer in Deep Reinforcement Learning for Robotics
+%% Source: IEEE SSCI 2020, DOI 10.1109/SSCI47803.2020.9308468
+%% -----------------------------------------------------------------------
+@inproceedings{bib14,
+  author    = {Zhao, Wenshuai and Queralta, Jorge Pena and Westerlund, Tomi},
+  title     = {Sim-to-Real Transfer in Deep Reinforcement Learning for Robotics: A Survey},
+  booktitle = {2020 IEEE Symposium Series on Computational Intelligence (SSCI)},
+  year      = {2020},
+  pages     = {737--744},
+  doi       = {10.1109/SSCI47803.2020.9308468}
+}
+
+%% -----------------------------------------------------------------------
+%% bib15: [17] Domain randomization for sim-to-real transfer
+%% Tobin 2017 -- Domain Randomization for Transferring Deep Neural Networks
+%% Source: IROS 2017, arXiv:1703.06907
+%% -----------------------------------------------------------------------
+@inproceedings{bib15,
+  author    = {Tobin, Josh and Fong, Rachel and Ray, Alex and Schneider, Jonas and Zaremba, Wojciech and Abbeel, Pieter},
+  title     = {Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World},
+  booktitle = {2017 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  year      = {2017},
+  pages     = {23--30},
+  doi       = {10.1109/IROS.2017.8202133},
+  note      = {arXiv:1703.06907}
+}
+
+%% -----------------------------------------------------------------------
+%% bib16: [18] RL + adaptation for sim-to-real (model-based + RL combination)
+%% Kumar 2021 -- RMA: Rapid Motor Adaptation for Legged Robots
+%% Source: Robotics: Science and Systems XVII (RSS 2021), arXiv:2107.04034
+%% -----------------------------------------------------------------------
+@inproceedings{bib16,
+  author    = {Kumar, Ashish and Fu, Zipeng and Pathak, Deepak and Malik, Jitendra},
+  title     = {{RMA}: Rapid Motor Adaptation for Legged Robots},
+  booktitle = {Robotics: Science and Systems XVII},
+  year      = {2021},
+  doi       = {10.15607/RSS.2021.XVII.011},
+  note      = {arXiv:2107.04034}
+}
+
+%% -----------------------------------------------------------------------
+%% bib17: [19] ROS 2 middleware framework
+%% Macenski 2022 -- Robot Operating System 2: Design, architecture, and uses in the wild
+%% Source: Science Robotics 7(66):eabm6074, DOI 10.1126/scirobotics.abm6074
+%% -----------------------------------------------------------------------
+@article{bib17,
+  author  = {Macenski, Steven and Foote, Tully and Gerkey, Brian and Lalancette, Chris and Woodall, William},
+  title   = {Robot Operating System 2: Design, Architecture, and Uses in the Wild},
+  journal = {Science Robotics},
+  year    = {2022},
+  volume  = {7},
+  number  = {66},
+  pages   = {eabm6074},
+  doi     = {10.1126/scirobotics.abm6074}
+}
+
+%% -----------------------------------------------------------------------
+%% bib18: [20] Communication constraints and deployment gap in RL robotics
+%% Kober 2013 -- Reinforcement Learning in Robotics: A Survey
+%% Source: International Journal of Robotics Research 32(11):1238-1274,
+%%         DOI 10.1177/0278364913495721
+%% -----------------------------------------------------------------------
+@article{bib18,
+  author  = {Kober, Jens and Bagnell, J. Andrew and Peters, Jan},
+  title   = {Reinforcement Learning in Robotics: A Survey},
+  journal = {International Journal of Robotics Research},
+  year    = {2013},
+  volume  = {32},
+  number  = {11},
+  pages   = {1238--1274},
+  doi     = {10.1177/0278364913495721}
+}

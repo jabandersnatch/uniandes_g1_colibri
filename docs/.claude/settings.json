@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'f=\"${TOOL_ARGS_FILE_PATH:-$TOOL_ARGS_file_path}\"; if [[ \"$f\" == *.tex ]]; then cd /home/jamendez/Documents/uniandes/MISIS/thesis/uniandes_g1_colibri/digital_twin_colibri_g1/docs/paper_document 2>/dev/null && latexmk -pdf -interaction=nonstopmode -quiet sn-article.tex 2>&1 | tail -5; fi; exit 0'"
+          }
+        ]
+      }
+    ]
+  }
+}
