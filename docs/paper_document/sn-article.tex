@@ -58,6 +58,7 @@
 \usepackage{tikz}%
 \usetikzlibrary{shapes.geometric,arrows.meta,positioning,fit,backgrounds,calc}%
 \usepackage{subcaption}%
+\usepackage{float}%
 %%%%
 
 %%%%%=============================================================================%%%%
@@ -639,7 +640,7 @@ Training fall rate     & 5.95\%                 & At iteration 1\,500 \\
 
 Figure~\ref{fig:training_curves} shows the evolution of key training metrics over 1\,500 iterations.
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.48\textwidth}
   \includegraphics[width=\textwidth]{figures/training_episode_reward}
@@ -680,7 +681,7 @@ The learned behavior exhibits several desirable characteristics:
 The policy operates directly at the joint command level across 29 actuated degrees of freedom, demonstrating that end-to-end reinforcement learning can synthesize coordinated locomotion behaviors without explicit trajectory planning or predefined gait models.
 Figure~\ref{fig:traj} shows the goal sampling distribution and representative trajectories observed during evaluation.
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
 \resizebox{\textwidth}{!}{\input{figures/fig_goal_sampling}}
 \caption{Goal sampling distribution and representative evaluation trajectories.
@@ -757,9 +758,10 @@ should either increase goal-reward magnitude, introduce curriculum learning
 (obstacle-free warm-up followed by progressive obstacle insertion), or adopt a
 hierarchical approach that decouples goal navigation from collision avoidance.
 
-Figure~\ref{fig:social_nav_curves} shows the training metrics for the social navigation experiment, confirming the failure to converge.
+Figures~\ref{fig:social_nav_reward} and~\ref{fig:social_nav_penalties} show the
+training metrics for the social navigation experiment, confirming the failure to converge.
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.48\textwidth}
   \includegraphics[width=\textwidth]{figures/social_nav_episode_reward}
@@ -777,24 +779,31 @@ Figure~\ref{fig:social_nav_curves} shows the training metrics for the social nav
 \end{subfigure}
 \hfill
 \begin{subfigure}[b]{0.48\textwidth}
-  \includegraphics[width=\textwidth]{figures/social_nav_obstacle_penalties}
-  \caption{Obstacle proximity penalties}
-\end{subfigure}
-\\[6pt]
-\begin{subfigure}[b]{0.48\textwidth}
   \includegraphics[width=\textwidth]{figures/social_nav_episode_length}
   \caption{Episode length}
+\end{subfigure}
+\caption{Social navigation performance metrics. Goal success rate (b) never
+exceeds 1\% and distance to goal (c) fails to decrease, indicating that
+the policy does not converge toward effective navigation.}
+\label{fig:social_nav_reward}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+  \includegraphics[width=\textwidth]{figures/social_nav_obstacle_penalties}
+  \caption{Obstacle proximity penalties}
 \end{subfigure}
 \hfill
 \begin{subfigure}[b]{0.48\textwidth}
   \includegraphics[width=\textwidth]{figures/social_nav_termination}
   \caption{Termination causes}
 \end{subfigure}
-\caption{Social navigation training curves. Goal success rate (b) never exceeds 1\%;
-obstacle proximity penalties (d) dominate the reward signal throughout training,
-confirming the gradient imbalance ($2.6\times$) identified in the analysis.
-Episode length (e) remains low, indicating frequent early termination.}
-\label{fig:social_nav_curves}
+\caption{Social navigation penalty and termination analysis. Obstacle proximity
+penalties (a) dominate the reward signal throughout training, confirming the
+$2.6\times$ gradient imbalance. Frequent early terminations (b) reflect
+the policy retreating from obstacles rather than navigating around them.}
+\label{fig:social_nav_penalties}
 \end{figure}
 
 \subsection{Implications for Humanoid Robotics Research}
