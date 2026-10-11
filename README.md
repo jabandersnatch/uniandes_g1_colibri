@@ -112,3 +112,7 @@ The bridge publishes `/lowstate`, `/utlidar/cloud` and front-camera RGB-D, and c
 ## Acknowledgments
 
 Advisor Dr. Carlos Andrés Lozano Garzón; Laboratorio Colivrí and the Department of Systems & Computing Engineering, Universidad de los Andes. Built on [Isaac Lab](https://github.com/isaac-sim/IsaacLab) (G1 locomotion and PPO configs), [RSL-RL](https://github.com/leggedrobotics/rsl_rl) and Unitree's ROS 2 interfaces.
+
+## License
+
+Code is released under the [MIT License](LICENSE). The thesis and paper documents in `docs/` remain under their respective copyrights (thesis © 2026 Universidad de los Andes).
